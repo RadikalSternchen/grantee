@@ -1,0 +1,11 @@
+[package]
+name = "grantee"
+version = "0.1.0"
+authors = ["Benjamin Kampmann <ben@gnunicorn.org>"]
+edition = "2018"
+publish = false
+
+
+[dependencies]
+rocket = "0.4.5"
+rocket_contrib = { features = ["tera_templates"], version = "0.4.5" }
