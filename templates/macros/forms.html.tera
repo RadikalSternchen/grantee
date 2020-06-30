@@ -266,16 +266,33 @@
 <fieldset>
     <h4>Zu deiner Person</h4>
     <p>Ein paar Informationen über Dich</p>
-    {{ fields::input(
-        prefix="person_",
-        name="name",
-        label="Dein Name",
-        help="wie sollen wir Dich ansprechen?",
-        value=form.name,
-        errors=errors,
-        type="text",
-        mandatory=true
-    )}}
+    <div class="row">
+        <div class="column column-50">
+            {{ fields::input(
+                prefix="person_",
+                name="name",
+                label="Dein Name",
+                help="wie sollen wir Dich ansprechen?",
+                value=form.name,
+                errors=errors,
+                type="text",
+                mandatory=true
+        )}}
+        </div>
+        <div class="column column-50">
+            {{ fields::input(
+                prefix="person_",
+                name="email",
+                label="Dein Email",
+                help="Wo können wir Dich erreichen?",
+                value=form.email,
+                errors=errors,
+                type="email",
+                mandatory=true
+            )}}
+        </div>
+
+    </div>
     {{ fields::textarea(
         prefix="person_",
         name="about_me",

@@ -167,13 +167,12 @@ impl ExtraInfo {
 
 #[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct EventInfo {
-    #[validate(length(min = 5))]
+    #[validate(length(min = 1))]
     name: String,
     #[validate(length(min = 20))]
     description: String,
-    #[validate(length(min = 5))]
+    #[validate(length(min = 2))]
     organiser: String,
-    #[validate(length(min = 5))]
     url: Option<String>,
     #[validate(length(min = 5))]
     why: String,

@@ -5,7 +5,7 @@
 extern crate validator;
 
 use rocket::fairing::AdHoc;
-use rocket::request::Form;
+use rocket::request::LenientForm;
 use rocket::response::{Redirect, status};
 use validator::Validate;
 use parity_scale_codec::Encode;
@@ -35,20 +35,28 @@ fn new_event_grant() -> Template {
     Template::render("grants/event_grant_form", &context)
 }
 
+fn render_error(e: String) -> Template {
+    let mut context = Context::new();
+    context.insert("error", &e);
+    Template::render("generic/error", &context)
+}
+
 #[post("/event-grants/new", data = "<event>")]
-fn new_event_grant_post(event: Form<model::EventGrantForm>, database: State<Database>)
+fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: State<Database>)
     -> Result<Redirect, status::BadRequest<Template>>
 {
     let event = event.into_inner();
     match event.validate() {
         Ok(_) => {
+            println!("all good");
             let db_item = model::Model::from(event);
             loop {
                 let id = uuid::Uuid::new_v4();
                 if database.0.contains_key(id.as_bytes()).unwrap_or(false) { continue }
 
-                database.0.insert(id.as_bytes(), db_item.encode());
-                return Ok(Redirect::temporary(uri!(view_grant: id.to_string())))
+                return database.0.insert(id.as_bytes(), db_item.encode())
+                    .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))
+                    .map(|_| Redirect::temporary(uri!(view_grant: id.to_string())))
             }
         }
         Err(errors) => {
