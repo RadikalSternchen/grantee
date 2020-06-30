@@ -1,8 +1,7 @@
 {% extends "base" %}
-{% import "macros/show_grant" as show %}
 
 {% block title %}
-| EventGrant '{{grant.title}}' einsehen.
+| AktivistiGrant '{{grant.title}}' einsehen
 {% endblock title %}
 
 {% block content %}

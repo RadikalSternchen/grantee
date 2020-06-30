@@ -1,0 +1,74 @@
+
+{% macro status_icon(state) %}
+    {% if state == "Draft" %}
+        <span title="draft">⚪</span>
+    {% elif state == "Incoming" %}
+        <span title="incoming">🔵</span>
+    {% elif state == "Checking" %}
+        <span title="checking">🟠</span>
+    {% elif state == "Board" %}
+        <span title="board">🟡</span>
+    {% else %}
+        🤷 {{state}}
+    {% endif %}
+{% endmacro %}
+   
+{% macro grant_details(info, process, uuid) %}
+    <div class="row">
+        <div class="column column-60">
+            <h3>Antrag '{{process.title}}' über {{info.amount}}€ </h3>
+            <p>{{info.cost_breakdown}}</p>
+        </div>
+        <div class="column column-40">
+            <ul>
+                <li>Status: {{self::status_icon(state=process.state)}} </li>
+                <li>Kennung: {{process.title}} ({{uuid}})</li>
+                <li>Eingegangen: {{process.created | date(format="%d. %B %Y")}}</li>
+                <li>Aktualisiert: {{process.last_updated | date(format="%d. %B %Y")}}</li>
+            </ul>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro person_details(info, ids) %}
+    <h3>{{info.name}} (<a href="mailto:{{info.email}}">{{info.email}}</a>)</h3>
+    <p>{{info.about_me}}</p>
+    {% if info.online_personas %}
+        <p>{{info.online_personas}}</p>
+    {% endif %}
+    {% if ids %}
+        <h4>Identifiziert als</h4>
+        <ul>{% for i in ids %}
+            <li>{{i}}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
+
+{% macro event_details(info) %}
+    <h3>{{info.name}}</h3>
+    <span></span>
+    <p>{{info.about_me}}</p>
+    {% if info.online_personas %}
+        <p>{{info.online_personas}}</p>
+    {% endif %}
+    {% if ids %}
+        <h4>Identifiziert als</h4>
+        <ul>{% for i in ids %}
+            <li>{{i}}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
+
+{% macro bank_details(info) %}
+    <h3>Bank Details</h3>
+    <div class="row">
+        <div class="column colum-50">IBAN: {{info.iban}}</div>
+        <div class="column colum-50">Name: {{info.account_name}}</div>
+    </div>
+    <div class="row">
+        <div class="column colum-50">BIC: {{info.bic}}</div>
+        <div class="column colum-50">Bank: {{info.bank_name}}</div>
+    </div>
+{% endmacro %}

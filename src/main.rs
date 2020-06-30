@@ -101,6 +101,7 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
     let grant =  get_or_404(&database, uuid.as_bytes())?;
     
     let mut context = Context::new();
+    context.insert("uuid", &uuid.to_string());
     if let Some(msg) = flash {
         let m: HashMap<&str, &str> = vec![
             ("name", msg.name()),
@@ -113,6 +114,11 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
         model::Model::EventGrant(g) => {
             context.insert("grant", &g);
             Ok(Template::render("grants/view_event_grant", &context))
+        }
+
+        model::Model::AktivistiGrant(g) => {
+            context.insert("grant", &g);
+            Ok(Template::render("grants/view_aktivisti_grant", &context))
         }
         _ => Err(status::NotFound(render_error("Unknown item type".to_owned())))
     }
