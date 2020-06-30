@@ -4,9 +4,10 @@
 {% macro grant_info(key, form, errors) %}
 
     {% set form = form[key] %}
-    {% set errors = errors %}
-    {% if error is containing(key) %}
+    {% if errors is containing(key) %}
       {% set errors = errors[key] %}
+    {% else %}
+      {% set errors = "" %}
     {% endif %}
 
 <fieldset>
@@ -35,13 +36,14 @@
 {% macro extra_info(key, form, errors) %}
 
     {% set form = form[key] %}
-    {% set errors = errors %}
-    {% if error is containing(key) %}
+    {% if errors is containing(key) %}
       {% set errors = errors[key] %}
+    {% else %}
+      {% set errors = "" %}
     {% endif%}
     
 <fieldset>
-    <h4>Abschließendes<h4>
+    <h4>Abschließendes</h4>
 
     {{ fields::textarea(
         prefix="extra_",
@@ -121,6 +123,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="woc",
+                value="WoC",
                 label="Black/Indigenous/Woman of Color (BIWoC)",
                 errors=errors,
                 selected=selected,
@@ -130,6 +133,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="bipoc",
+                value="BIPoC",
                 label="Black/Indigenous/Person of Color (BIPoC)",
                 errors=errors,
                 selected=selected,
@@ -139,6 +143,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="sinti_roma",
+                value="SintiRoma",
                 label="Sinti / Roma",
                 errors=errors,
                 selected=selected,
@@ -148,6 +153,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="muslima",
+                value="Muslima",
                 label="Muslima / Muslim",
                 errors=errors,
                 selected=selected,
@@ -157,6 +163,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="jewish",
+                value="Jewish",
                 label="Jüdin / Jude",
                 errors=errors,
                 selected=selected,
@@ -166,6 +173,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="non_white",
+                value="NonWhite",
                 label="nicht als Weiß",
                 errors=errors,
                 selected=selected,
@@ -175,6 +183,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="trans",
+                value="Trans",
                 label="Trans*",
                 errors=errors,
                 selected=selected,
@@ -184,6 +193,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="woman",
+                value="Woman",
                 label="Frau",
                 errors=errors,
                 selected=selected,
@@ -193,6 +203,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="mother",
+                value="Mother",
                 label="(werdende) Mutter",
                 errors=errors,
                 selected=selected,
@@ -202,6 +213,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="non_man",
+                value="NonMan",
                 label="Nicht als Mann",
                 errors=errors,
                 selected=selected,
@@ -211,6 +223,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="with_disability",
+                value="WithDisability",
                 label="Mensch mit Behinderung",
                 errors=errors,
                 selected=selected,
@@ -220,6 +233,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="inter",
+                value="Inter",
                 label="Inter",
                 errors=errors,
                 selected=selected,
@@ -229,6 +243,7 @@
             {{ fields::checkbox(
                 prefix="id_",
                 name="agender",
+                value="Agender",
                 label="Agender",
                 errors=errors,
                 selected=selected,
@@ -241,9 +256,10 @@
 {% macro personal_info(key, form, errors, bio_help="") %}
 
     {% set form = form[key] %}
-    {% set errors = errors %}
-    {% if error is containing(key) %}
+    {% if errors is containing(key) %}
       {% set errors = errors[key] %}
+    {% else %}
+      {% set errors = "" %}
     {% endif%}
     
 
@@ -284,16 +300,17 @@
 {% macro bank_info(key, form, errors) %}
 
     {% set form = form[key] %}
-    {% set errors = errors %}
-    {% if error is containing(key) %}
-      {% set errors = errors[key] %}
+    {% if errors is containing(key) %}
+      {% set errors = errors[key] %}  
+    {% else %}
+      {% set errors = "" %}      
     {% endif%}
 
 <fieldset>
     <h4>Zahlungsinformationen</h4>
     <p>Auf welches Konto soll der Grant ausgezahlt werden?</p>
     <div class="row">
-        <div class="column colmn-60">
+        <div class="column column-60">
             {{ fields::input(
                 prefix="bank_",
                 name="iban",
@@ -337,4 +354,77 @@
     </div>
 </fieldset>
 
+{% endmacro %}
+
+
+{% macro event_details(key, form, errors) %}
+
+    {% set form = form[key] %}
+    {% if errors is containing(key) %}
+      {% set errors = errors[key] %}
+    {% else %}
+      {% set errors = "" %}
+    {% endif%}
+    
+
+<fieldset>
+    <h4>Zu der Veranstaltung</h4>
+    <p>Ein paar Informationen über die Veranstaltung</p>
+    <div class="row>">
+      <div class="column column-50">
+        {{ fields::input(
+            prefix="event_",
+            name="name",
+            label="Name",
+            value=form.name,
+            errors=errors,
+            type="text",
+            mandatory=true
+        )}}
+      </div>
+      <div class="column column-50">
+        {{ fields::input(
+            prefix="event_",
+            name="organiser",
+            label="Veranstalterin",
+            help="Wer organisiert die Veranstaltung_",
+            value=form.organiser,
+            errors=errors,
+            type="text",
+            mandatory=true
+        )}}
+      </div>
+    </div>
+    <div class="row">
+      <div class="column">
+      {{ fields::textarea(
+          prefix="event_",
+          name="description",
+          label="Kurzbeschreibung",
+          help="Gib uns bitte ein paar mehr Informationen zu der Veranstaltung: welche Form hat sie, worum geht es, wo findet sie statt und wer nimmt teil, etc. - alles, was hilft, Deinen Antrag nachzuvollziehen.",
+          value=form.description,
+          errors=errors,
+          mandatory=true
+      )}}
+      {{ fields::input(
+          prefix="event_",
+          name="url",
+          label="Weitere Links zur Veranstaltng",
+          help="Finden wir irgendwo weitere Informationen zu der Veranstaltung?",
+          value=form.url,
+          errors=errors,
+          type="text",
+          mandatory=false
+      )}}
+      {{ fields::textarea(
+          prefix="event_",
+          name="why",
+          label="Warum diese Veranstaltung",
+          help="Aus welchem Grund möchtest Du zu der Veranstaltung? Erkläre uns kurz Deine Motivation: was erhoffst Du Dir von der Teilnahme an dieser Veranstaltung?",
+          value=form.why,
+          errors=errors,
+          mandatory=true
+      )}}
+    </div>
+</fieldset>
 {% endmacro %}

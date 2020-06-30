@@ -36,7 +36,7 @@ impl Identity {
             "trans" => Self::Trans,
             "woman" => Self::Woman,
             "mother" => Self::Mother,
-            "non_man" => Self::NonWhite,
+            "non_man" => Self::NonMan,
             "with_disability" => Self::WithDisability,
             "inter" => Self::Inter,
             "agender" => Self::Agender,
@@ -216,18 +216,17 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
         let mut s: Self = Default::default();
 
         for item in items {
-            let key = item.key.as_str();
-            println!("{:} : {:}", key, item.value);
+            let (key, value) = item.key_value_decoded();
             if key.starts_with("grant_") {
-                s.grant_info.set(&item.key[6..], item.value.to_string())?;
+                s.grant_info.set(&key[6..], value)?;
             } else if key.starts_with("id_") {
-                s.identities.push(Identity::from(&item.key[2..])?);
+                s.identities.push(Identity::from(&key[2..])?);
             } else if key.starts_with("person_") {
-                s.person.set(&item.key[7..], item.value.to_string())?;
+                s.person.set(&key[7..], value)?;
             } else if key.starts_with("bank_") {
-                s.bank.set(&item.key[5..], item.value.to_string())?;
+                s.bank.set(&key[5..], value)?;
             } else if key.starts_with("extra_") {
-                s.extra.set(&item.key[6..], item.value.to_string())?;
+                s.extra.set(&key[6..], value)?;
             } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }
@@ -283,20 +282,19 @@ impl<'f> FromForm<'f> for EventGrantForm {
         let mut s: Self = Default::default();
 
         for item in items {
-            let key = item.key.as_str();
-            println!("{:} : {:}", key, item.value);
+            let (key, value) = item.key_value_decoded();
             if key.starts_with("grant_") {
-                s.grant_info.set(&item.key[6..], item.value.to_string())?;
+                s.grant_info.set(&key[6..], value)?;
             } else if key.starts_with("id_") {
-                s.identities.push(Identity::from(&item.key[3..])?);
+                s.identities.push(Identity::from(&key[3..])?);
             } else if key.starts_with("event_") {
-                s.event_info.set(&item.key[6..], item.value.to_string())?;
+                s.event_info.set(&key[6..], value)?;
             } else if key.starts_with("person_") {
-                s.person.set(&item.key[7..], item.value.to_string())?;
+                s.person.set(&key[7..], value)?;
             } else if key.starts_with("bank_") {
-                s.bank.set(&item.key[5..], item.value.to_string())?;
+                s.bank.set(&key[5..], value)?;
             } else if key.starts_with("extra_") {
-                s.extra.set(&item.key[6..], item.value.to_string())?;
+                s.extra.set(&key[6..], value)?;
             } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }

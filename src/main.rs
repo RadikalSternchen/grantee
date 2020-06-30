@@ -1,17 +1,14 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
-#[macro_use]
-extern crate validator_derive;
+#[macro_use] extern crate validator_derive;
 extern crate validator;
 
 use rocket::fairing::AdHoc;
 use rocket::request::Form;
 use rocket::response::{Redirect, status};
-use validator::{Validate, ValidationErrors};
+use validator::Validate;
 use parity_scale_codec::Encode;
-use serde::{Serialize, Deserialize};
-use std::borrow::Cow;
 
 use std::collections::HashMap;
 use sled;
@@ -19,7 +16,6 @@ use rocket::State;
 use rocket_contrib::{
     templates::{Template, tera::Context},
     serve::StaticFiles,
-    uuid::Uuid as rUuid,
 };
 
 mod model;
@@ -33,16 +29,9 @@ fn index() -> Template {
 
 #[get("/event-grants/new")]
 fn new_event_grant() -> Template {
-    let mut context =  Context::new();
-    let errors = vec![
-        ("grant_info", ""),
-        ("person", ""),
-        ("extra", ""),
-        ("grant_info", ""),
-        ("bank", ""),
-    ].into_iter().collect::<HashMap<_,  _>>();
+    let mut context = Context::new();
     context.insert("form", &model::EventGrantForm::default());
-    context.insert("errors", &errors);
+    context.insert("errors", "");
     Template::render("grants/event_grant_form", &context)
 }
 
@@ -64,9 +53,9 @@ fn new_event_grant_post(event: Form<model::EventGrantForm>, database: State<Data
         }
         Err(errors) => {
             let mut context =  Context::new();
+            println!("{:#?} –> {:#?}", event, errors);
             context.insert("form", &event);
             context.insert("errors", &errors);
-            println!("{:?}", errors);
 
             Err(status::BadRequest(
                 Some(
@@ -81,11 +70,11 @@ fn new_event_grant_post(event: Form<model::EventGrantForm>, database: State<Data
 }
 
 #[get("/v/<id>")]
-fn view_grant(id: String, database: State<Database>) -> Template {
-    let context = HashMap::<String, String>::new();
-    Template::render("example", &context)
+fn view_grant(id: String, database: State<Database>) -> Result<Template, status::NotFound<String>>
+{
+    let context = Context::new();
+    Ok(Template::render("view_grant", &context))
 }
-
 
 
 fn main() {

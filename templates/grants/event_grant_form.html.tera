@@ -2,7 +2,6 @@
 {% import "macros/form_fields" as fields %}
 {% import "macros/forms" as form_helpers %}
 
-
 {% block title %}
 | EventGrant beantragen
 {% endblock title %}
@@ -10,6 +9,9 @@
 {% block content %}
 <form action="/event-grants/new" method="POST">
     {{  form_helpers::grant_info(key="grant_info", form=form, errors=errors) }}
+
+    {{  form_helpers::event_details(key="event_info", form=form, errors=errors) }}
+
     {{  form_helpers::personal_info(key="person", form=form, errors=errors, bio_help="Gib uns einen kurzen Einblick, wer Du bist, Deinen Hintergrund und weitere Informationen, die uns helfen, Dich kurz kennen zu lernen.") }}
     {{  form_helpers::identities(selected=form.identities, errors="") }}
     {{  form_helpers::bank_info(key="bank", form=form, errors=errors) }}

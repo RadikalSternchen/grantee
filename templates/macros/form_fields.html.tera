@@ -25,7 +25,6 @@
             id="{{prefix ~ name}}"
             placeholder="{{placeholder}}"
             {% if has_error %}class="error"{% endif %}
-            {% if mandatory %}required{% endif %}
         >{{value | safe}}</textarea>
         {% if has_error %}
             {{ self::render_errors(errors=errors[name]) }}
@@ -33,20 +32,19 @@
     </label>
 {% endmacro textarea %}
 
-{% macro checkbox(name, label, mandatory=false, checked=false, selected="", prefix="", errors="") %}
+{% macro checkbox(name, label, value=true, mandatory=false, checked=false, selected="", prefix="", errors="") %}
     {% set has_error = errors is containing(name) %}
     <label for="{{prefix ~ name}}">
         <input name="{{prefix ~ name}}"
             id="{{prefix ~ name}}"
             type="checkbox"
-            value="true"
+            value="{{value}}"
             {% if checked %}
                 checked="true"
             {% else %}
-                {% if selected is containing(name) %}checked="true"{% endif %}
+                {% if selected is containing(value) %}checked="true"{% endif %}
             {% endif %}
             {% if has_error %}class="error"{% endif %}
-            {% if mandatory %}required{% endif %}
             />
         {% if mandatory %}
             <span title="zwingend erforderlich">{{ label | safe }}*</span>
@@ -76,7 +74,6 @@
             type="{{type}}"
             value="{{value | safe}}"
             {% if has_error %}class="error"{% endif %}
-            {% if mandatory %}required{% endif %}
             />
         {% if has_error %}
             {{ self::render_errors(errors=errors[name]) }}
