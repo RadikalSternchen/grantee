@@ -9,20 +9,12 @@
 
 {% block content %}
 <form action="/event-grants/new" method="POST">
-    {{  form_helpers::grant_info(form=form.grant_info, errors=errors.grant_info) }}
-    {{  form_helpers::personal_info(form=form.person, errors=errors.person, bio_help="Gib uns einen kurzen Einblick, wer Du bist, Deinen Hintergrund und weitere Informationen, die uns helfen, Dich kurz kennen zu lernen.") }}
-    {{  form_helpers::bank_info(form=form.bank, errors=errors.bank) }}
-    
-  <fieldset>
-    <h4>Abschließendes<h4>
+    {{  form_helpers::grant_info(key="grant_info", form=form, errors=errors) }}
+    {{  form_helpers::personal_info(key="person", form=form, errors=errors, bio_help="Gib uns einen kurzen Einblick, wer Du bist, Deinen Hintergrund und weitere Informationen, die uns helfen, Dich kurz kennen zu lernen.") }}
+    {{  form_helpers::identities(selected=form.identities, errors="") }}
+    {{  form_helpers::bank_info(key="bank", form=form, errors=errors) }}
+    {{  form_helpers::extra_info(key="extra", form=form, errors=errors) }}
 
-    {{ fields::textarea(
-        prefix="extra",
-        name="comment",
-        label="Kommentar",
-        value="",
-        errors=errors
-    )}}
 
     <div class="float-right">
       <input class="button-primary" type="submit" value="Send">

@@ -34,8 +34,15 @@ fn index() -> Template {
 #[get("/event-grants/new")]
 fn new_event_grant() -> Template {
     let mut context =  Context::new();
+    let errors = vec![
+        ("grant_info", ""),
+        ("person", ""),
+        ("extra", ""),
+        ("grant_info", ""),
+        ("bank", ""),
+    ].into_iter().collect::<HashMap<_,  _>>();
     context.insert("form", &model::EventGrantForm::default());
-    context.insert("errors", &HashMap::<String, String>::new());
+    context.insert("errors", &errors);
     Template::render("grants/event_grant_form", &context)
 }
 
@@ -56,11 +63,6 @@ fn new_event_grant_post(event: Form<model::EventGrantForm>, database: State<Data
             }
         }
         Err(errors) => {
-            // print!("errors: {:?}", e);
-            // let errors:HashMap<&'static str, Vec<Cow<'static, str>>> = e.field_errors()
-            //     .into_iter().map(|(k, errs)| {
-            //         (k, errs.into_iter().map(|v| v.message.clone().unwrap_or("Error".into())).collect())
-            //     }).collect();
             let mut context =  Context::new();
             context.insert("form", &event);
             context.insert("errors", &errors);

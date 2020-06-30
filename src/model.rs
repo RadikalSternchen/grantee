@@ -39,7 +39,7 @@ impl Identity {
             "non_man" => Self::NonWhite,
             "with_disability" => Self::WithDisability,
             "inter" => Self::Inter,
-            "Agender" => Self::Agender,
+            "agender" => Self::Agender,
             i => return Err(format!("Unknown key {:}", i)),
         })
     }
@@ -128,6 +128,42 @@ impl GrantInfo {
     }
 }
 
+#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
+pub struct ExtraInfo {
+    comment: Option<String>,
+    #[validate(required)]
+    accepted_privacy: Option<bool>,
+    #[validate(required)]
+    accepted_coc: Option<bool>,
+    newsletter_monthly: bool,
+    newsletter_fund: bool
+}
+
+impl ExtraInfo {
+    fn set(&mut self, key: &str, value: String) -> Result<(), String> {
+        Ok(match key {
+            "comment" => {
+                self.comment = Some(value)
+            },
+            "accepted_privacy" => {
+                self.accepted_privacy = Some(true);
+            },
+            "accepted_coc" => {
+                self.accepted_coc = Some(true);
+            },
+            "newsletter_monthly" => {
+                self.newsletter_monthly = true;
+            },
+            "newsletter_fund" => {
+                self.newsletter_fund = true;
+            }
+            _ => {
+                return Err(format!("Unknown key {:} on extra info", key));
+            }
+        })
+    }
+}
+
 
 #[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct EventInfo {
@@ -167,6 +203,8 @@ pub struct AktivistiGrantForm {
     person: PersonalDetails,
     #[validate]
     bank: BankDetails,
+    #[validate]
+    extra: ExtraInfo,
 }
 
 impl<'f> FromForm<'f> for AktivistiGrantForm {
@@ -179,6 +217,7 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
 
         for item in items {
             let key = item.key.as_str();
+            println!("{:} : {:}", key, item.value);
             if key.starts_with("grant_") {
                 s.grant_info.set(&item.key[6..], item.value.to_string())?;
             } else if key.starts_with("id_") {
@@ -187,6 +226,8 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
                 s.person.set(&item.key[7..], item.value.to_string())?;
             } else if key.starts_with("bank_") {
                 s.bank.set(&item.key[5..], item.value.to_string())?;
+            } else if key.starts_with("extra_") {
+                s.extra.set(&item.key[6..], item.value.to_string())?;
             } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }
@@ -201,7 +242,8 @@ pub struct AktivistiGrantDetails {
     grant_info: GrantInfo,
     person: Person,
     identities: Vec<Identity>,
-    bank: Option<BankDetails>
+    bank: Option<BankDetails>,
+    extra: ExtraInfo,
 }
 
 impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
@@ -210,7 +252,8 @@ impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
             grant_info: a.grant_info,
             person: Person::Detail(a.person),
             identities: a.identities,
-            bank: Some(a.bank)
+            bank: Some(a.bank),
+            extra: a.extra,
         }
     }
 }
@@ -226,6 +269,8 @@ pub struct EventGrantForm {
     person: PersonalDetails,
     #[validate]
     bank: BankDetails,
+    #[validate]
+    extra: ExtraInfo,
 }
 
 
@@ -239,16 +284,19 @@ impl<'f> FromForm<'f> for EventGrantForm {
 
         for item in items {
             let key = item.key.as_str();
+            println!("{:} : {:}", key, item.value);
             if key.starts_with("grant_") {
                 s.grant_info.set(&item.key[6..], item.value.to_string())?;
             } else if key.starts_with("id_") {
-                s.identities.push(Identity::from(&item.key[2..])?);
+                s.identities.push(Identity::from(&item.key[3..])?);
             } else if key.starts_with("event_") {
                 s.event_info.set(&item.key[6..], item.value.to_string())?;
             } else if key.starts_with("person_") {
                 s.person.set(&item.key[7..], item.value.to_string())?;
             } else if key.starts_with("bank_") {
                 s.bank.set(&item.key[5..], item.value.to_string())?;
+            } else if key.starts_with("extra_") {
+                s.extra.set(&item.key[6..], item.value.to_string())?;
             } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }
@@ -264,7 +312,8 @@ pub struct EventGrantDetails {
     event_info: EventInfo,
     person: Person,
     identities: Vec<Identity>,
-    bank: Option<BankDetails>
+    bank: Option<BankDetails>,
+    extra: ExtraInfo,
 }
 
 impl From<EventGrantForm> for EventGrantDetails {
@@ -274,7 +323,8 @@ impl From<EventGrantForm> for EventGrantDetails {
             event_info: a.event_info,
             person: Person::Detail(a.person),
             identities: a.identities,
-            bank: Some(a.bank)
+            bank: Some(a.bank),
+            extra: a.extra
         }
     }
 }

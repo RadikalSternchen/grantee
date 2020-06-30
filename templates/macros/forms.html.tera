@@ -1,9 +1,16 @@
 
 {% import "macros/form_fields" as fields %}
 
-{% macro grant_info(form, errors) %}
+{% macro grant_info(key, form, errors) %}
+
+    {% set form = form[key] %}
+    {% set errors = errors %}
+    {% if error is containing(key) %}
+      {% set errors = errors[key] %}
+    {% endif %}
+
 <fieldset>
-    <h4>Antragsumfang</h4>
+    <h4>Antrag</h4>
     {{ fields::input(
         prefix="grant_",
         name="amount",
@@ -24,7 +31,222 @@
 </fieldset>
 {% endmacro %}
 
-{% macro personal_info(form, errors, bio_help="") %}
+
+{% macro extra_info(key, form, errors) %}
+
+    {% set form = form[key] %}
+    {% set errors = errors %}
+    {% if error is containing(key) %}
+      {% set errors = errors[key] %}
+    {% endif%}
+    
+<fieldset>
+    <h4>Abschließendes<h4>
+
+    {{ fields::textarea(
+        prefix="extra_",
+        name="comment",
+        label="Kommentar",
+        value=form.comment,
+        errors=errors
+    )}}
+
+    <div class="row">
+        <div class="column column-25">
+            <span>Datenschutz*</span>
+        </div>
+        <div class="column column-75">
+            {{ fields::checkbox(
+                prefix="extra_",
+                name="accepted_privacy",
+                label="Ich habe die <a target='_blank' href='https://radikal.jetzt/datenschutz/'>Datenschutzerklärung</a> gelesen und akzeptiert.",
+                errors=errors,
+                checked=form.accepted_privacy,
+                mandatory=true
+            )}}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="column column-25">
+            <span>Verhaltenskodex*</span>
+        </div>
+        <div class="column column-75">
+            {{ fields::checkbox(
+                prefix="extra_",
+                name="accepted_coc",
+                label="Ich habe den <a target='_blank' href='https://radikal.jetzt/verhaltenskodex/'>Verhaltenskodex</a> gelesen und gelobe mich daran zu halten.",
+                errors=errors,
+                checked=form.accepted_coc,
+                mandatory=true
+            )}}
+        </div>
+    </div>
+
+
+    <div class="row">
+        <div class="column column-25">
+            <span>Newsletter</span>
+        </div>
+        <div class="column column-75">
+            <p>Möchtest Du unseren E-Mail-Newsletter bekommen?</p>
+            {{ fields::checkbox(
+                prefix="extra_",
+                name="newsletter_monthly",
+                label="Bitte schickt mir bitte die monatliche Zusammenfassung von Radikal*",
+                errors=errors,
+                checked=form.newsletter_monthly,
+                mandatory=false
+            )}}
+            {{ fields::checkbox(
+                prefix="extra_",
+                name="newsletter_fund",
+                label="Bitte schickt mir Updates des Radikal*Fund",
+                errors=errors,
+                checked=form.newsletter_fund,
+                mandatory=false
+            )}}
+        </div>
+    </div>
+</fieldset>
+{% endmacro %}
+
+{% macro identities(selected, errors) %}
+
+    <div class="row">
+        <div class="column column-25">
+            <span>Ich identifiziere als ...</span>
+        </div>
+        <div class="column column-75">
+            {{ fields::checkbox(
+                prefix="id_",
+                name="woc",
+                label="Black/Indigenous/Woman of Color (BIWoC)",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="bipoc",
+                label="Black/Indigenous/Person of Color (BIPoC)",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="sinti_roma",
+                label="Sinti / Roma",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="muslima",
+                label="Muslima / Muslim",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="jewish",
+                label="Jüdin / Jude",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="non_white",
+                label="nicht als Weiß",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="trans",
+                label="Trans*",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="woman",
+                label="Frau",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="mother",
+                label="(werdende) Mutter",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="non_man",
+                label="Nicht als Mann",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="with_disability",
+                label="Mensch mit Behinderung",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="inter",
+                label="Inter",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+
+            {{ fields::checkbox(
+                prefix="id_",
+                name="agender",
+                label="Agender",
+                errors=errors,
+                selected=selected,
+                mandatory=false
+            )}}
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro personal_info(key, form, errors, bio_help="") %}
+
+    {% set form = form[key] %}
+    {% set errors = errors %}
+    {% if error is containing(key) %}
+      {% set errors = errors[key] %}
+    {% endif%}
+    
+
 <fieldset>
     <h4>Zu deiner Person</h4>
     <p>Ein paar Informationen über Dich</p>
@@ -54,12 +276,19 @@
         help="Bist Du öffentlich online aktiv? Hast Du eine Webseite, Blog oder öffentliche Web-Profile bei Social-Media (z.B. Facebook Page, Twitter, Tumblr, Youtube, Instagram, Blog, etc)? Bitte verlinke diese hier (je eine pro Zeile).",
         value=form.online_personas,
         errors=errors,
-        mandatory=true
+        mandatory=false
     )}}
 </fieldset>
 {% endmacro %}
 
-{% macro bank_info(form, errors) %}
+{% macro bank_info(key, form, errors) %}
+
+    {% set form = form[key] %}
+    {% set errors = errors %}
+    {% if error is containing(key) %}
+      {% set errors = errors[key] %}
+    {% endif%}
+
 <fieldset>
     <h4>Zahlungsinformationen</h4>
     <p>Auf welches Konto soll der Grant ausgezahlt werden?</p>
@@ -70,6 +299,7 @@
                 name="iban",
                 label="IBAN",
                 value=form.iban,
+                placeholder="DE 1234 4567 0000 9999 42",
                 errors=errors,
                 mandatory=true
             )}}

@@ -26,12 +26,38 @@
             placeholder="{{placeholder}}"
             {% if has_error %}class="error"{% endif %}
             {% if mandatory %}required{% endif %}
-        >{{value}}</textarea>
+        >{{value | safe}}</textarea>
         {% if has_error %}
             {{ self::render_errors(errors=errors[name]) }}
         {% endif %}
     </label>
 {% endmacro textarea %}
+
+{% macro checkbox(name, label, mandatory=false, checked=false, selected="", prefix="", errors="") %}
+    {% set has_error = errors is containing(name) %}
+    <label for="{{prefix ~ name}}">
+        <input name="{{prefix ~ name}}"
+            id="{{prefix ~ name}}"
+            type="checkbox"
+            value="true"
+            {% if checked %}
+                checked="true"
+            {% else %}
+                {% if selected is containing(name) %}checked="true"{% endif %}
+            {% endif %}
+            {% if has_error %}class="error"{% endif %}
+            {% if mandatory %}required{% endif %}
+            />
+        {% if mandatory %}
+            <span title="zwingend erforderlich">{{ label | safe }}*</span>
+        {% else %}
+            {{label | safe}}
+        {% endif %}
+        {% if has_error %}
+            {{ self::render_errors(errors=errors[name]) }}
+        {% endif %}
+    </label>
+{% endmacro %}
 
 {% macro input(name, label, type="text", mandatory=false, prefix="", placeholder="",
                value="", errors="", help=""
@@ -48,7 +74,7 @@
             id="{{prefix ~ name}}"
             placeholder="{{placeholder}}"
             type="{{type}}"
-            value="{{value}}"
+            value="{{value | safe}}"
             {% if has_error %}class="error"{% endif %}
             {% if mandatory %}required{% endif %}
             />
