@@ -11,3 +11,16 @@ input.error {
 label span.error {
     color: #f20779;
 }
+
+.message {
+    padding: 1rem;
+    border: 1px solid #aaa;
+    border-radius: 5px;
+    margin: 1rem 0;
+  }
+  
+  .message.success {
+    border-color: green;
+    background-color: lightgreen;
+    color: green;
+  }
