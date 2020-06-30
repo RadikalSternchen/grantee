@@ -8,7 +8,8 @@ use rocket::fairing::AdHoc;
 use rocket::request::{LenientForm, FlashMessage};
 use rocket::response::{Flash, Redirect, status};
 use validator::Validate;
-use parity_scale_codec::Encode;
+use parity_scale_codec::{Encode, Decode};
+use uuid::Uuid;
 
 use std::collections::HashMap;
 use sled;
@@ -51,17 +52,18 @@ fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: Sta
             println!("all good");
             let db_item = model::Model::from(event);
             loop {
-                let id = uuid::Uuid::new_v4();
+                let id = Uuid::new_v4();
                 if database.0.contains_key(id.as_bytes()).unwrap_or(false) { continue }
 
                 return database.0.insert(id.as_bytes(), db_item.encode())
                     .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))
-                    .map(|_|
+                    .map(|_| {
+                        database.0.flush();
                         Flash::success(
                             Redirect::to(uri!(view_grant: id.to_string())),
                             "Dein Antrag ist eingegangen. Danke!"
                         )
-                    )
+                    })
             }
         }
         Err(errors) => {
@@ -82,9 +84,22 @@ fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: Sta
     }
 }
 
+fn get_or_404(database: &Database, id: &[u8]) -> Result<model::Model, status::NotFound<Template>> {
+    match database.0.get(id) {
+        Ok(Some(m)) => model::Model::decode(&mut m.as_ref()).map_err(|e|
+                status::NotFound(render_error(format!("Error decoding item: {:}", e)))),
+        Ok(None) => Err(status::NotFound(render_error("Entry not found".to_string()))),
+        Err(e) => Err(status::NotFound(render_error(e.to_string()))),
+    }
+}
+
 #[get("/v/<id>")]
-fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>) -> Result<Template, status::NotFound<String>>
+fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>)
+    -> Result<Template, status::NotFound<Template>>
 {
+    let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
+    let grant =  get_or_404(&database, uuid.as_bytes())?;
+    
     let mut context = Context::new();
     if let Some(msg) = flash {
         let m: HashMap<&str, &str> = vec![
@@ -93,7 +108,14 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
         ].into_iter().collect();
         context.insert("flash_message", &m);
     }
-    Ok(Template::render("grants/view_grant", &context))
+
+    match grant {
+        model::Model::EventGrant(g) => {
+            context.insert("grant", &g);
+            Ok(Template::render("grants/view_event_grant", &context))
+        }
+        _ => Err(status::NotFound(render_error("Unknown item type".to_owned())))
+    }
 }
 
 

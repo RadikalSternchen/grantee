@@ -5,5 +5,5 @@
 {% endblock title %}
 
 {% block content %}
-Showing something
+{{grant.state}}
 {% endblock %}

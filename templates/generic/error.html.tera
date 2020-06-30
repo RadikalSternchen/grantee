@@ -5,6 +5,6 @@
 {% endblock title %}
 
 {% block content %}
-<h1>Bei der Übermittelung ist ein Fehler aufgetreten</h1>
-<h3>{{error}}</h3>
+    <h1>😓 Es ist ein Fehler aufgetreten </h1>
+    <h3>{{error}}</h3>
 {% endblock %}
