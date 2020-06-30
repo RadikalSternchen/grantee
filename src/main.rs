@@ -12,6 +12,7 @@ use parity_scale_codec::{Encode, Decode};
 use uuid::Uuid;
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use sled;
 use rocket::State;
 use rocket_contrib::{
@@ -93,6 +94,39 @@ fn get_or_404(database: &Database, id: &[u8]) -> Result<model::Model, status::No
     }
 }
 
+#[get("/list")]
+fn list(database: State<Database>, flash: Option<FlashMessage>)
+    -> Template
+{
+    let mut context = Context::new();
+    let entries = database.0.iter()
+    .filter_map(|r|r.ok())
+    .filter_map(|(uuid, val)|
+        Uuid::from_slice(uuid.as_ref())
+            .ok()
+            .and_then(|u| model::Model::decode(&mut val.as_ref()).map(|m| (u.to_string(), m)).ok())
+    ).fold(HashMap::<&'static str, Vec<(String, model::Model)>>::new(), 
+    |mut m, (uuid, model)| {
+        if let Some(target) = model.state_name() {
+            match m.entry(target) {
+                Entry::Occupied(mut o) => { o.get_mut().push((uuid, model)); },
+                Entry::Vacant(v) => { v.insert(vec![(uuid, model)]); }
+            }
+        }
+        m
+    });
+    context.insert("entries", &entries);
+    if let Some(msg) = flash {
+        let m: HashMap<&str, &str> = vec![
+            ("name", msg.name()),
+            ("msg", msg.msg())
+        ].into_iter().collect();
+        context.insert("flash_message", &m);
+    }
+    
+    Template::render("grants/list", &context)
+}
+
 #[get("/v/<id>")]
 fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>)
     -> Result<Template, status::NotFound<Template>>
@@ -141,6 +175,7 @@ fn main() {
         .mount("/pub", StaticFiles::from("static"))
         .mount("/", routes![
             index,
+            list,
             view_grant,
             new_event_grant_post,
             new_event_grant,

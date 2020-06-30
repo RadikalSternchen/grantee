@@ -12,6 +12,18 @@
         🤷 {{state}}
     {% endif %}
 {% endmacro %}
+
+{% macro link_to(id, item) %}
+{% if item is containing("AktivistiGrant") %}
+    {% set entry = item.AktivistiGrant %}
+    {% set icon = "💪" %}
+{% elif item is containing("EventGrant") %}
+    {% set entry = item.EventGrant %}
+    {% set icon = "📆" %}
+{% endif %}
+<a href="/v/{{id}}">{{icon}} '{{entry.title}}'' über {{entry.details.grant_info.amount}}€</a>
+{% endmacro %}
+
    
 {% macro grant_details(info, process, uuid) %}
     <div class="row">

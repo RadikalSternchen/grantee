@@ -392,6 +392,20 @@ pub enum GrantState {
     Archived(ArchivedState)
 }
 
+impl GrantState {
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            GrantState::Draft => "draft",
+            GrantState::Incoming => "incoming",
+            GrantState::Checking => "checking",
+            GrantState::Board => "board",
+            GrantState::Accepted(_) => "accepted",
+            GrantState::Paid(_) => "paid",
+            GrantState::Archived(_) => "archived",
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Encode, Decode, Debug)]
 pub struct StateActivity {
     from: GrantState,
@@ -436,6 +450,16 @@ impl<T> From<T> for GrantProcess<T>
 pub enum Model {
     AktivistiGrant(GrantProcess<AktivistiGrantDetails>),
     EventGrant(GrantProcess<EventGrantDetails>),
+}
+
+impl Model {
+    pub fn state_name(&self) -> Option<&'static str> {
+        match self {
+            Model::EventGrant(g) => Some(g.state.short_name()),
+            Model::AktivistiGrant(g) => Some(g.state.short_name()),
+            _ => None
+        }
+    }
 }
 
 impl From<AktivistiGrantForm> for Model {

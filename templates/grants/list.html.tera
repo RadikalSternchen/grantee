@@ -1,0 +1,37 @@
+{% extends "base" %}
+{% import "macros/show_grant" as show %}
+
+{% macro section(title, key, entries) %}
+{% if entries is containing(key) %}
+    <h4>{{title}} ({{entries[key] | length}})</h4>
+    <ul>
+    {% for e in entries[key] %}
+        <li>{{show::link_to(id=e.0, item=e.1)}}</li>
+    {% endfor %}
+    </ul>
+{% else %}
+    <h5>{{title}} (0)</h5>
+    <p>keine</p>
+{% endif %}
+{% endmacro %}
+
+
+{% block title %}
+| Übersicht
+{% endblock title %}
+
+{% block content %}
+
+{{self::section(title="Eingangen", key="incoming", entries=entries)}}
+
+{{self::section(title="In Prüfung", key="checking", entries=entries)}}
+
+{{self::section(title="Beim Board", key="board", entries=entries)}}
+
+{{self::section(title="Angenommen", key="accepted", entries=entries)}}
+
+{{self::section(title="Ausgezahlt", key="paid", entries=entries)}}
+
+{{self::section(title="Archiviert", key="archived", entries=entries)}}
+
+{% endblock %}
