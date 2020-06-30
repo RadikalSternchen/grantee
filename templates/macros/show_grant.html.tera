@@ -47,18 +47,11 @@
 
 {% macro event_details(info) %}
     <h3>{{info.name}}</h3>
-    <span></span>
-    <p>{{info.about_me}}</p>
-    {% if info.online_personas %}
-        <p>{{info.online_personas}}</p>
-    {% endif %}
-    {% if ids %}
-        <h4>Identifiziert als</h4>
-        <ul>{% for i in ids %}
-            <li>{{i}}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
+    <span>{{info.organiser}}</span>
+    <p>{{info.description}}</p>
+    <p>{{info.url}}<p>
+    <hr />
+    <p>{{info.why}}<p>
 {% endmacro %}
 
 {% macro bank_details(info) %}

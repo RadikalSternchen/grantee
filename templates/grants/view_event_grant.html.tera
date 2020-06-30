@@ -7,6 +7,7 @@
 
 {% block content %}
     {{ show::grant_details(info=grant.details.grant_info, process=grant, uuid=uuid) }}
+    {{ show::event_details(info=grant.details.event_info) }}
     {% if grant.details.person is containing("Detail") %}
         {{ show::person_details(info=grant.details.person.Detail, ids=grant.details.identities)}}
     {% else %}
