@@ -1,0 +1,59 @@
+{% macro render_errors(errors) %}
+    {% for err in errors %}
+        <span class="error" title="{{err.code}}">
+            {% if err.message %}
+                {{err.message}}
+            {% else %}
+                {{err.code}}
+            {% endif %}
+        </span>
+    {% endfor  %}
+{% endmacro %}
+
+{% macro textarea(name, label, mandatory=false, prefix="", placeholder="",
+               value="", errors="", help=""
+  ) %}
+    {% set has_error = errors is containing(name) %}
+    <label for="{{prefix ~ name}}">
+        {% if mandatory %}
+            <span title="zwingend erforderlich">{{ label }}*</span>
+        {% else %}
+            {{label}}
+        {% endif %}
+        {% if help %}<span class="help">{{help}}</span>{% endif %}
+        <textarea name="{{prefix ~ name}}"
+            id="{{prefix ~ name}}"
+            placeholder="{{placeholder}}"
+            {% if has_error %}class="error"{% endif %}
+            {% if mandatory %}required{% endif %}
+        >{{value}}</textarea>
+        {% if has_error %}
+            {{ self::render_errors(errors=errors[name]) }}
+        {% endif %}
+    </label>
+{% endmacro textarea %}
+
+{% macro input(name, label, type="text", mandatory=false, prefix="", placeholder="",
+               value="", errors="", help=""
+  ) %}
+    {% set has_error = errors is containing(name) %}
+    <label for="{{prefix ~ name}}">
+        {% if mandatory %}
+            <span title="zwingend erforderlich">{{ label }}*</span>
+        {% else %}
+            {{label}}
+        {% endif %}
+        {% if help %}<span class="help">{{help}}</span>{% endif %}
+        <input name="{{prefix ~ name}}"
+            id="{{prefix ~ name}}"
+            placeholder="{{placeholder}}"
+            type="{{type}}"
+            value="{{value}}"
+            {% if has_error %}class="error"{% endif %}
+            {% if mandatory %}required{% endif %}
+            />
+        {% if has_error %}
+            {{ self::render_errors(errors=errors[name]) }}
+        {% endif %}
+    </label>
+{% endmacro input %}

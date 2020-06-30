@@ -1,0 +1,110 @@
+
+{% import "macros/form_fields" as fields %}
+
+{% macro grant_info(form, errors) %}
+<fieldset>
+    <h4>Antragsumfang</h4>
+    {{ fields::input(
+        prefix="grant_",
+        name="amount",
+        label="Betrag (Euro)",
+        value=form.amount,
+        errors=errors,
+        type="number",
+        mandatory=true
+    )}}
+    {{ fields::textarea(
+        prefix="grant_",
+        name="cost_breakdown",
+        label="Kostenaufschlüsselung",
+        value=form.cost_breakdown,
+        errors=errors,
+        mandatory=true
+    )}}
+</fieldset>
+{% endmacro %}
+
+{% macro personal_info(form, errors, bio_help="") %}
+<fieldset>
+    <h4>Zu deiner Person</h4>
+    <p>Ein paar Informationen über Dich</p>
+    {{ fields::input(
+        prefix="person_",
+        name="name",
+        label="Dein Name",
+        help="wie sollen wir Dich ansprechen?",
+        value=form.name,
+        errors=errors,
+        type="text",
+        mandatory=true
+    )}}
+    {{ fields::textarea(
+        prefix="person_",
+        name="about_me",
+        label="Über dich",
+        value=form.about_me,
+        help=bio_help,
+        errors=errors,
+        mandatory=true
+    )}}
+    {{ fields::textarea(
+        prefix="person_",
+        name="online_personas",
+        label="Online Präsenzen",
+        help="Bist Du öffentlich online aktiv? Hast Du eine Webseite, Blog oder öffentliche Web-Profile bei Social-Media (z.B. Facebook Page, Twitter, Tumblr, Youtube, Instagram, Blog, etc)? Bitte verlinke diese hier (je eine pro Zeile).",
+        value=form.online_personas,
+        errors=errors,
+        mandatory=true
+    )}}
+</fieldset>
+{% endmacro %}
+
+{% macro bank_info(form, errors) %}
+<fieldset>
+    <h4>Zahlungsinformationen</h4>
+    <p>Auf welches Konto soll der Grant ausgezahlt werden?</p>
+    <div class="row">
+        <div class="column colmn-60">
+            {{ fields::input(
+                prefix="bank_",
+                name="iban",
+                label="IBAN",
+                value=form.iban,
+                errors=errors,
+                mandatory=true
+            )}}
+        </div>
+        <div class="column column-40">
+            {{ fields::input(
+                prefix="bank_",
+                name="account_name",
+                label="Kontoinhaberin",
+                value=form.account_name,
+                errors=errors,
+                help="falls abweichend"
+            )}}
+        </div>
+    </div>
+    <div class="row">
+        <div class="column colmn-60">
+            {{ fields::input(
+                prefix="bank_",
+                name="bic",
+                label="BIC",
+                value=form.bic,
+                errors=errors
+            )}}
+        </div>
+        <div class="column column-40">
+            {{ fields::input(
+                prefix="bank_",
+                name="bank_name",
+                label="Name der Bank",
+                value=form.bank_name,
+                errors=errors
+            )}}
+        </div>
+    </div>
+</fieldset>
+
+{% endmacro %}

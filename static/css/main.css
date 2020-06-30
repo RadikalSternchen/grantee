@@ -1,0 +1,13 @@
+label .help {
+    font-size: 0.8em;
+    font-weight: 500;
+}
+
+textarea.error,
+input.error { 
+    border-color: #f20779;
+}
+
+label span.error {
+    color: #f20779;
+}

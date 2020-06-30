@@ -1,0 +1,32 @@
+{% extends "base" %}
+{% import "macros/form_fields" as fields %}
+{% import "macros/forms" as form_helpers %}
+
+
+{% block title %}
+| EventGrant beantragen
+{% endblock title %}
+
+{% block content %}
+<form action="/event-grants/new" method="POST">
+    {{  form_helpers::grant_info(form=form.grant_info, errors=errors.grant_info) }}
+    {{  form_helpers::personal_info(form=form.person, errors=errors.person, bio_help="Gib uns einen kurzen Einblick, wer Du bist, Deinen Hintergrund und weitere Informationen, die uns helfen, Dich kurz kennen zu lernen.") }}
+    {{  form_helpers::bank_info(form=form.bank, errors=errors.bank) }}
+    
+  <fieldset>
+    <h4>Abschließendes<h4>
+
+    {{ fields::textarea(
+        prefix="extra",
+        name="comment",
+        label="Kommentar",
+        value="",
+        errors=errors
+    )}}
+
+    <div class="float-right">
+      <input class="button-primary" type="submit" value="Send">
+    </div>
+  </fieldset>
+</form>
+{% endblock content %}

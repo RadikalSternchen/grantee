@@ -1,12 +1,13 @@
 
 use parity_scale_codec::{Encode, Decode};
 use rocket::request::{Form, FromForm, FormItems};
+use serde::{Serialize, Deserialize};
+use std::time::SystemTime;
 
 // A trait that the Validate derive will impl
 use validator::{Validate, ValidationError};
-use validator_derive;
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Serialize, Deserialize, Decode)]
 pub enum Identity {
     WoC,
     BIPoC,
@@ -45,7 +46,7 @@ impl Identity {
 }
 
 
-#[derive(FromForm, Debug, Validate, Encode, Default, Decode)]
+#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct PersonalDetails {
     #[validate(length(min = 1))]
     name: String,
@@ -65,19 +66,19 @@ impl PersonalDetails {
             "email" => { self.email = value; },
             "about_me" => { self.about_me = value; },
             _ => {
-                print!("Unknown key {:} on grant info", key);
+                return Err(format!("Unknown key {:} on personal details", key));
             }
         })
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
 enum Person {
     Anonymised(String), // storing the hash of the E-Mail
     Detail(PersonalDetails), // FullInfo
 }
 
-#[derive(FromForm, Debug, Validate, Encode, Default, Decode)]
+#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct BankDetails {
     #[validate(length(min = 10))]
     iban: String,
@@ -94,13 +95,13 @@ impl BankDetails {
             "bank_name" => { self.bank_name = Some(value); },
             "account_name" => { self.account_name = Some(value); },
             _ => {
-                print!("Unknown key {:} on grant info", key);
+                return Err(format!("Unknown key {:} on bank info", key))
             }
         })
     }
 }
 
-#[derive(FromForm, Debug, Validate, Encode, Default, Decode)]
+#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct GrantInfo { 
     /// grant info
     #[validate(range(max = 200))]
@@ -128,7 +129,7 @@ impl GrantInfo {
 }
 
 
-#[derive(FromForm, Debug, Validate, Encode, Decode, Default)]
+#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct EventInfo {
     #[validate(length(min = 5))]
     name: String,
@@ -157,7 +158,7 @@ impl EventInfo {
     }
 }
 
-#[derive(Debug, Validate, Default)]
+#[derive(Debug, Validate, Serialize, Deserialize, Default)]
 pub struct AktivistiGrantForm {
     #[validate]
     grant_info: GrantInfo,
@@ -186,7 +187,7 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
                 s.person.set(&item.key[7..], item.value.to_string())?;
             } else if key.starts_with("bank_") {
                 s.bank.set(&item.key[5..], item.value.to_string())?;
-            } else {
+            } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }
         }
@@ -195,7 +196,7 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct AktivistiGrantDetails {
     grant_info: GrantInfo,
     person: Person,
@@ -214,7 +215,7 @@ impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
     }
 }
 
-#[derive(Debug, Default, Validate)]
+#[derive(Debug, Serialize, Deserialize, Default, Validate)]
 pub struct EventGrantForm {
     #[validate]
     grant_info: GrantInfo,
@@ -223,7 +224,6 @@ pub struct EventGrantForm {
     event_info: EventInfo,
     #[validate]
     person: PersonalDetails,
-
     #[validate]
     bank: BankDetails,
 }
@@ -249,7 +249,7 @@ impl<'f> FromForm<'f> for EventGrantForm {
                 s.person.set(&item.key[7..], item.value.to_string())?;
             } else if key.starts_with("bank_") {
                 s.bank.set(&item.key[5..], item.value.to_string())?;
-            } else {
+            } else if strict {
                 return Err(format!("Unknown key {:}", key));
             }
         }
@@ -258,7 +258,7 @@ impl<'f> FromForm<'f> for EventGrantForm {
     }
 }
 
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct EventGrantDetails {
     grant_info: GrantInfo,
     event_info: EventInfo,
@@ -267,7 +267,7 @@ pub struct EventGrantDetails {
     bank: Option<BankDetails>
 }
 
-impl From<EventGrantForm>  for  EventGrantDetails {
+impl From<EventGrantForm> for EventGrantDetails {
     fn from(a: EventGrantForm) -> EventGrantDetails {
         EventGrantDetails {
             grant_info: a.grant_info,
@@ -284,7 +284,7 @@ pub type UserId = u8;
 /// SINCE UNIX_EPOCH
 pub type TimeStamp = u64;  
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Encode, Serialize, Deserialize, Decode, Debug)]
 /// Archived States are anonymised
 pub enum ArchivedState {
     /// This was accepted, amount X was paid – full Euros
@@ -297,7 +297,7 @@ pub enum ArchivedState {
     Failed,
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Encode, Decode, Debug)]
 pub enum GrantState {
     /// Not shown until submitted
     Draft,
@@ -310,7 +310,7 @@ pub enum GrantState {
     Archived(ArchivedState)
 }
 
-#[derive(Encode, Decode, Debug)]
+#[derive(Serialize, Deserialize, Encode, Decode, Debug)]
 pub struct StateActivity {
     from: GrantState,
     to: GrantState,
@@ -319,7 +319,7 @@ pub struct StateActivity {
     comment: Option<String>
 }
 
-#[derive(Encode, Decode)]
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub struct GrantProcess<T: Encode + Decode> {
     created: TimeStamp,
     last_updated: TimeStamp,
@@ -329,8 +329,41 @@ pub struct GrantProcess<T: Encode + Decode> {
     details: T
 }
 
-#[derive(Encode, Decode)]
+impl<T> From<T> for GrantProcess<T>
+    where T: Encode + Decode
+{
+    fn from(t: T) -> Self {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|s| s.as_secs())
+            .expect("System time is always available. qed");
+
+        Self {
+            created: now.clone(),
+            last_updated: now,
+            title: "test title".into(),
+            state: GrantState::Incoming,
+            activities: vec![],
+            details: t,
+        }
+    }
+
+}
+
+#[derive(Serialize, Deserialize, Encode, Decode)]
 pub enum Model {
     AktivistiGrant(GrantProcess<AktivistiGrantDetails>),
     EventGrant(GrantProcess<EventGrantDetails>),
+}
+
+impl From<AktivistiGrantForm> for Model {
+    fn from(a: AktivistiGrantForm) -> Model {
+        Self::AktivistiGrant(GrantProcess::from(AktivistiGrantDetails::from(a)))
+    }
+}
+
+impl From<EventGrantForm> for Model {
+    fn from(a: EventGrantForm) -> Model {
+        Self::EventGrant(GrantProcess::from(EventGrantDetails::from(a)))
+    }
 }
