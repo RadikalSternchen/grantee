@@ -5,8 +5,9 @@
 extern crate validator;
 
 use rocket::fairing::AdHoc;
-use rocket::request::{LenientForm, FlashMessage};
+use rocket::request::{LenientForm, Form, FlashMessage};
 use rocket::response::{Flash, Redirect, status};
+use rocket::http::{Cookie, Cookies};
 use validator::Validate;
 use parity_scale_codec::{Encode, Decode};
 use uuid::Uuid;
@@ -21,12 +22,50 @@ use rocket_contrib::{
 };
 
 mod model;
+mod auth;
 pub struct Database(sled::Db);
 
 #[get("/")]
 fn index() -> Template {
     let context = HashMap::<String, String>::new();
     Template::render("index", &context)
+}
+
+
+#[get("/login")]
+fn already_logged_in(_user: auth::User) -> Redirect {
+    Redirect::to(uri!(list))
+}
+
+#[get("/login", rank=2)]
+fn login() -> Template {
+    let mut context = Context::new();
+    context.insert("form", &auth::LoginForm::default());
+    context.insert("errors", "");
+    Template::render("auth/login", &context)
+}
+
+#[post("/login",  data = "<login>")]
+fn post_login(login: Form<auth::LoginForm>, db: State<auth::UserDatabase>, mut cookies: Cookies) -> Result<Redirect, Template> {
+    if db.login(&login) {
+        cookies.add_private(
+            Cookie::build("username", login.username().clone())
+            .http_only(true)
+            .secure(true)
+            .finish()
+        );
+        return Ok(Redirect::to(uri!(list)))
+    } 
+    
+    let mut context = Context::new();
+    let mut msg = HashMap::new();
+    msg.insert("msg", "Login failed");
+    msg.insert("name", "error");
+    context.insert("flash_message", &msg);
+
+    context.insert("form", &login.into_inner());
+    context.insert("errors", "");
+    Err(Template::render("auth/login", &context))
 }
 
 #[get("/event-grants/new")]
@@ -95,7 +134,7 @@ fn get_or_404(database: &Database, id: &[u8]) -> Result<model::Model, status::No
 }
 
 #[get("/list")]
-fn list(database: State<Database>, flash: Option<FlashMessage>)
+fn list(database: State<Database>, flash: Option<FlashMessage>, _user: auth::User)
     -> Template
 {
     let mut context = Context::new();
@@ -172,9 +211,23 @@ fn main() {
                 .expect("Opening sled database failed");
             Ok(rocket.manage(Database(db)))
         }))
+        .attach(AdHoc::on_attach("Login Config", |rocket| {
+            let db: HashMap<String, String> = rocket.config()
+                .get_table("users")
+                .map(|t| t
+                        .into_iter()
+                        .filter_map(|(k, v)| v.clone().try_into::<String>().ok().map(|r| (k.clone(), r)))
+                        .collect())
+                .unwrap_or_default();
+            Ok(rocket.manage(auth::UserDatabase::new(db)))
+        }))
         .mount("/pub", StaticFiles::from("static"))
         .mount("/", routes![
             index,
+            already_logged_in,
+            post_login,
+            login,
+            
             list,
             view_grant,
             new_event_grant_post,

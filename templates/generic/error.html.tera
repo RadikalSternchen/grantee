@@ -7,4 +7,4 @@
 {% block content %}
     <h1>😓 Es ist ein Fehler aufgetreten </h1>
     <h3>{{error}}</h3>
-{% endblock %}
+{% endblock %}index

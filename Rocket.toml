@@ -5,6 +5,9 @@ keep_alive = 5
 log = "normal"
 limits = { forms = 32768 }
 database = ".dev.sled"
+[development.users]
+ben = "password"
+yasmina = "test"
 
 [staging]
 address = "0.0.0.0"

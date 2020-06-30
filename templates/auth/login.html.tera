@@ -1,0 +1,18 @@
+{% extends "base" %}
+{% import "macros/form_fields" as fields %}
+
+{% block title %}
+| Login
+{% endblock title %}
+
+{% block content %}
+<form action="/login" method="POST">
+
+    {{fields::input(name="username", label="Username", mandatory=true, value=form.username, errors=errors)}}
+    {{fields::input(name="password", label="Password", type="password", mandatory=true, value=form.password, errors=errors)}}
+
+    <div class="float-right">
+      <input class="button-primary" type="submit" value="Login">
+    </div>
+</form>
+{% endblock %}

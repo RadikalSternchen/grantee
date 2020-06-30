@@ -443,7 +443,6 @@ impl<T> From<T> for GrantProcess<T>
             details: t,
         }
     }
-
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode)]
