@@ -5,8 +5,8 @@
 extern crate validator;
 
 use rocket::fairing::AdHoc;
-use rocket::request::LenientForm;
-use rocket::response::{Redirect, status};
+use rocket::request::{LenientForm, FlashMessage};
+use rocket::response::{Flash, Redirect, status};
 use validator::Validate;
 use parity_scale_codec::Encode;
 
@@ -43,7 +43,7 @@ fn render_error(e: String) -> Template {
 
 #[post("/event-grants/new", data = "<event>")]
 fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: State<Database>)
-    -> Result<Redirect, status::BadRequest<Template>>
+    -> Result<Flash<Redirect>, status::BadRequest<Template>>
 {
     let event = event.into_inner();
     match event.validate() {
@@ -56,7 +56,12 @@ fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: Sta
 
                 return database.0.insert(id.as_bytes(), db_item.encode())
                     .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))
-                    .map(|_| Redirect::temporary(uri!(view_grant: id.to_string())))
+                    .map(|_|
+                        Flash::success(
+                            Redirect::to(uri!(view_grant: id.to_string())),
+                            "Dein Antrag ist eingegangen. Danke!"
+                        )
+                    )
             }
         }
         Err(errors) => {
@@ -78,10 +83,17 @@ fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: Sta
 }
 
 #[get("/v/<id>")]
-fn view_grant(id: String, database: State<Database>) -> Result<Template, status::NotFound<String>>
+fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>) -> Result<Template, status::NotFound<String>>
 {
-    let context = Context::new();
-    Ok(Template::render("view_grant", &context))
+    let mut context = Context::new();
+    if let Some(msg) = flash {
+        let m: HashMap<&str, &str> = vec![
+            ("name", msg.name()),
+            ("msg", msg.msg())
+        ].into_iter().collect();
+        context.insert("flash_message", &m);
+    }
+    Ok(Template::render("grants/view_grant", &context))
 }
 
 

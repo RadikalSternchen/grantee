@@ -26,6 +26,9 @@
       </nav>
 
       <section class="container" id="content">
+        {% if flash_message %}
+          <div class="message {{flash_message.name}}">{{flash_message.msg}}</div>
+        {% endif %}
         {% block content %}{% endblock content %}
       </section>
 
