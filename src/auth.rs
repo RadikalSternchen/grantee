@@ -34,6 +34,12 @@ impl UserDatabase {
 }
 pub struct User(String);
 
+impl User {
+    pub fn username(&self) -> &String {
+        &self.0
+    }
+}
+
 impl<'a, 'r> FromRequest<'a, 'r> for User {
     type Error = ();
 

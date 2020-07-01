@@ -8,8 +8,19 @@ input.error {
     border-color: #f20779;
 }
 
+.text-right {
+    text-align: right;
+}
+
 label span.error {
     color: #f20779;
+}
+
+.boxed {
+    margin: 1rem 0;
+    padding: 1rem;
+    border-radius: 15px;
+    border:#aaa 1px solid;
 }
 
 .message {
@@ -17,10 +28,89 @@ label span.error {
     border: 1px solid #aaa;
     border-radius: 5px;
     margin: 1rem 0;
+}
+  
+.message.success {
+    border-color: green;
+    color: green;
+}
+  
+.message.error {
+    border-color: #f20779;;
+    color: #f20779;;
+}
+
+.message.warning {
+    border-color: #f5ce28;
+    background: #f5ce28 no-repeat 50%;
+    color: #000;
+}
+
+.header {
+    position: relative;
+    padding: 1rem 0;
+    margin-bottom: 2rem;
+    color: #000;
+    background: #f5ce28 no-repeat 50%;
+    background-size: cover;
+}
+
+.navigation-title {
+    position: relative;
+    z-index: 100;
+    flex-shrink: 0;
+    display: block;
+    margin-right: 24px;
+    padding: 11px 0;
+    color: #000;
+    font-size: 1.7rem;
+    line-height: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -.5px;
+    text-transform: none;
+}
+
+.footer {
+    position: relative;
+    padding-top: 20px;
+    padding-bottom: 60px;
+    color: #15171a;
+    background: #f81b84;
+}
+
+.footer a {
+    color: #006;
+    border-bottom: 1px dotted #006;
+    text-decoration: none;
+    font-size: 1.4rem;
+}
+
+/* Custom color */
+.button-black {
+    background-color: black;
+    border-color: black;
+    color: #f5ce28;
+  }
+  .button-black.button-clear,
+  .button-black.button-outline {
+    background-color: transparent;
+    color: black;
+  }
+  .button-black.button-clear {
+    border-color: transparent;
   }
   
-  .message.success {
-    border-color: green;
-    background-color: lightgreen;
-    color: green;
+  /* Custom size */
+  .button-small {
+    font-size: .8rem;
+    height: 2.8rem;
+    line-height: 2.8rem;
+    padding: 0 1.5rem;
+  }
+  
+  .button-large {
+    font-size: 1.4rem;
+    height: 4.5rem;
+    line-height: 4.5rem;
+    padding: 0 2rem;
   }

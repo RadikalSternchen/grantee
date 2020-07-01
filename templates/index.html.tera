@@ -8,10 +8,10 @@
 {% block content %}
 <div class="row">
 <div class="column column-50" style="padding: 10rem 0; text-align: center;">
-<a class="button"  href="/event-grants/new">EventGrant beantragen</a>
+<a class="button button-large"  href="/event-grants/new">EventGrant beantragen</a>
 </div>
 <div class="column column-50" style="padding: 10rem 0; text-align: center;">
-<a class="button" href="/aktivisti-grants/new">AktivistiGrant beantragen</a>
+<a class="button button-large" href="/aktivisti-grants/new">AktivistiGrant beantragen</a>
 </div>
 </div>
 {% endblock content %}

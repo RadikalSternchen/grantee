@@ -26,8 +26,8 @@ mod auth;
 pub struct Database(sled::Db);
 
 #[get("/")]
-fn index() -> Template {
-    let context = HashMap::<String, String>::new();
+fn index(flash: Option<FlashMessage>, user: Option<auth::User>) -> Template {
+    let context = default_context(flash, user);
     Template::render("index", &context)
 }
 
@@ -35,6 +35,12 @@ fn index() -> Template {
 #[get("/login")]
 fn already_logged_in(_user: auth::User) -> Redirect {
     Redirect::to(uri!(list))
+}
+
+#[get("/logout")]
+fn logout(_user: auth::User, mut cookies: Cookies) -> Redirect {
+    cookies.remove_private(Cookie::named("username"));
+    Redirect::to(uri!(index))
 }
 
 #[get("/login", rank=2)]
@@ -133,11 +139,29 @@ fn get_or_404(database: &Database, id: &[u8]) -> Result<model::Model, status::No
     }
 }
 
+fn default_context(flash: Option<FlashMessage>, user: Option<auth::User>) -> Context {
+    let mut context = Context::new();
+    if let Some(msg) = flash {
+        let m: HashMap<&str, &str> = vec![
+            ("name", msg.name()),
+            ("msg", msg.msg())
+        ].into_iter().collect();
+        context.insert("flash_message", &m);
+    }
+    if let Some(user) = user {
+        context.insert("current_user", &user.username());
+    }  else {
+        context.insert("current_user", &false);
+    }
+
+    context
+}
+
 #[get("/list")]
-fn list(database: State<Database>, flash: Option<FlashMessage>, _user: auth::User)
+fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User)
     -> Template
 {
-    let mut context = Context::new();
+    let mut context = default_context(flash, Some(user));
     let entries = database.0.iter()
     .filter_map(|r|r.ok())
     .filter_map(|(uuid, val)|
@@ -155,33 +179,18 @@ fn list(database: State<Database>, flash: Option<FlashMessage>, _user: auth::Use
         m
     });
     context.insert("entries", &entries);
-    if let Some(msg) = flash {
-        let m: HashMap<&str, &str> = vec![
-            ("name", msg.name()),
-            ("msg", msg.msg())
-        ].into_iter().collect();
-        context.insert("flash_message", &m);
-    }
-    
     Template::render("grants/list", &context)
 }
 
 #[get("/v/<id>")]
-fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>)
+fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>, user: Option<auth::User>)
     -> Result<Template, status::NotFound<Template>>
 {
     let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
     let grant =  get_or_404(&database, uuid.as_bytes())?;
     
-    let mut context = Context::new();
+    let mut context = default_context(flash, user);
     context.insert("uuid", &uuid.to_string());
-    if let Some(msg) = flash {
-        let m: HashMap<&str, &str> = vec![
-            ("name", msg.name()),
-            ("msg", msg.msg())
-        ].into_iter().collect();
-        context.insert("flash_message", &m);
-    }
 
     match grant {
         model::Model::EventGrant(g) => {
@@ -227,7 +236,8 @@ fn main() {
             already_logged_in,
             post_login,
             login,
-            
+            logout,
+
             list,
             view_grant,
             new_event_grant_post,

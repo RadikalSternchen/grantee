@@ -17,8 +17,8 @@
     {{  form_helpers::bank_info(key="bank", form=form, errors=errors) }}
     {{  form_helpers::extra_info(key="extra", form=form, errors=errors) }}
 
-    <div class="float-right">
-      <input class="button-primary" type="submit" value="Send">
+    <div style="text-align: right">
+      <button class="button-primary" type="submit">Abschicken</button>
     </div>
 </form>
 {% endblock content %}

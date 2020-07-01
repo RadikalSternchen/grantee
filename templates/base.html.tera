@@ -17,13 +17,23 @@
   </head>
   <body>
     <main class="wrapper">
-      <nav class="navigation">
-        <section class="container">
-          <a class="navigation-title" href="/">
-            <h1 class="title">Radikal*Fund Grants</h1>
-          </a>
-        </section>
-      </nav>
+      <header class="header">
+        <nav class="navigation">
+          <section class="container">
+          <div class="row">
+            <div class="column column-75">
+              <a class="navigation-title" href="/">Radikal*Fund Grants</a>
+            </div>
+            <div class="column column-25" style="text-align: right">
+              {% if current_user %}
+                <a href="/list">Admin</a>
+              {% endif %}
+              <a class="button button-black button-outline" href="https://radikal.jetzt/fund/">Über</a>
+            </div>
+          </div>
+          </section>
+        </nav>
+      </header>
 
       <section class="container" id="content">
         {% if flash_message %}
@@ -35,7 +45,12 @@
       <footer class="footer">
         <section class="container">
           <p>
-            <a href="https://radikal.jetzt/">Ein Projekt von Radikal*</a>.
+            Ein Projekt von <a href="https://radikal.jetzt/">Radikal*</a>. 
+              {% if current_user %}
+                | <a href="/logout">Logout</a>
+              {% else %}
+                | <a href="/login">Login</a>
+              {% endif %}
           </p>
         </section>
       </footer>

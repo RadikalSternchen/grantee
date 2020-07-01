@@ -6,13 +6,17 @@
 {% endblock title %}
 
 {% block content %}
-<form action="/login" method="POST">
+<div class="row">
+    <div class="column column-50 column-offset-25 boxed">
+        <form action="/login" method="POST">
 
-    {{fields::input(name="username", label="Username", mandatory=true, value=form.username, errors=errors)}}
-    {{fields::input(name="password", label="Password", type="password", mandatory=true, value=form.password, errors=errors)}}
+            {{fields::input(name="username", label="Username", mandatory=true, value=form.username, errors=errors)}}
+            {{fields::input(name="password", label="Password", type="password", mandatory=true, value=form.password, errors=errors)}}
 
-    <div class="float-right">
-      <input class="button-primary" type="submit" value="Login">
+            <div class="text-right">
+            <input class="button-primary" type="submit" value="Login">
+            </div>
+        </form>
     </div>
-</form>
+</div>
 {% endblock %}
