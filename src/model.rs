@@ -39,10 +39,14 @@ static ICONS : [&str; 440] = ["👿","👹","👺","🤡","💩","👻","💀","
 
 fn make_random_title(len: u8) -> String {
     let mut rng = thread_rng();
-    [0..len].iter().map(move |_| *ICONS.choose(&mut rng).expect("Exists")).collect()
+    let mut s = String::new();
+    for _ in 0..len {
+        s.push_str(ICONS.choose(&mut rng).expect("Exists"))
+    }
+    s
 } 
 
-#[derive(Debug, Encode, Serialize, Deserialize, Decode)]
+#[derive(Debug, Clone, Encode, Serialize, Deserialize, Decode)]
 pub enum Identity {
     WoC,
     BIPoC,
@@ -81,7 +85,7 @@ impl Identity {
 }
 
 
-#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
+#[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct PersonalDetails {
     #[validate(length(min = 1))]
     name: String,
@@ -107,13 +111,13 @@ impl PersonalDetails {
     }
 }
 
-#[derive(Debug, Encode, Decode, Serialize, Deserialize)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize)]
 enum Person {
     Anonymised(String), // storing the hash of the E-Mail
     Detail(PersonalDetails), // FullInfo
 }
 
-#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
+#[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct BankDetails {
     #[validate(length(min = 10))]
     iban: String,
@@ -136,11 +140,11 @@ impl BankDetails {
     }
 }
 
-#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
+#[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct GrantInfo { 
     /// grant info
     #[validate(range(min=1, max = 200))]
-    amount: u8,
+    amount: u32,
     #[validate(length(min = 5))]
     cost_breakdown: String,
 }
@@ -163,7 +167,7 @@ impl GrantInfo {
     }
 }
 
-#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
+#[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct ExtraInfo {
     comment: Option<String>,
     #[validate(required)]
@@ -200,7 +204,7 @@ impl ExtraInfo {
 }
 
 
-#[derive(FromForm, Debug, Validate, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct EventInfo {
     #[validate(length(min = 1))]
     name: String,
@@ -228,7 +232,7 @@ impl EventInfo {
     }
 }
 
-#[derive(Debug, Validate, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Validate, Serialize, Deserialize, Default)]
 pub struct AktivistiGrantForm {
     #[validate]
     grant_info: GrantInfo,
@@ -270,7 +274,7 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct AktivistiGrantDetails {
     grant_info: GrantInfo,
     person: Person,
@@ -291,7 +295,7 @@ impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, Validate)]
 pub struct EventGrantForm {
     #[validate]
     grant_info: GrantInfo,
@@ -338,7 +342,7 @@ impl<'f> FromForm<'f> for EventGrantForm {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct EventGrantDetails {
     grant_info: GrantInfo,
     event_info: EventInfo,
@@ -361,16 +365,16 @@ impl From<EventGrantForm> for EventGrantDetails {
     }
 }
 
-/// The UserIds are numbered
-pub type UserId = u8;
+/// The Usernames are numbered
+pub type Username = String;
 /// SINCE UNIX_EPOCH
 pub type TimeStamp = u64;  
 
-#[derive(Encode, Serialize, Deserialize, Decode, Debug)]
+#[derive(Encode, Clone, Serialize, Deserialize, Decode, Debug)]
 /// Archived States are anonymised
 pub enum ArchivedState {
     /// This was accepted, amount X was paid – full Euros
-    Accepted(u32),
+    Funded(u32),
     /// This was retracted by the submitter
     Retracted,
     /// This was on formal grounds
@@ -379,7 +383,7 @@ pub enum ArchivedState {
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Debug)]
+#[derive(Serialize, Clone, Deserialize, Encode, Decode, Debug)]
 pub enum GrantState {
     /// Not shown until submitted
     Draft,
@@ -406,16 +410,16 @@ impl GrantState {
     }
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Debug)]
+#[derive(Serialize, Clone, Deserialize, Encode, Decode, Debug)]
 pub struct StateActivity {
     from: GrantState,
     to: GrantState,
-    by: UserId,
+    by: Username,
     when: TimeStamp,
     comment: Option<String>
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode)]
+#[derive(Serialize, Clone, Deserialize, Encode, Decode)]
 pub struct GrantProcess<T: Encode + Decode> {
     created: TimeStamp,
     last_updated: TimeStamp,
@@ -425,14 +429,74 @@ pub struct GrantProcess<T: Encode + Decode> {
     details: T
 }
 
+fn now() -> u64 {
+    SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|s| s.as_secs())
+            .expect("System time is always available. qed")
+}
+
+impl<T: Encode + Decode> GrantProcess<T> {
+    pub fn transition_to(&mut self, next_stage: &str, user: String, amount: u32, comment: Option<String>)
+        -> Result<(), String>
+    {
+        let next = match (next_stage, &self.state) {
+            ("draft", GrantState::Draft) |
+            ("incoming", GrantState::Incoming) |
+            ("checking", GrantState::Checking) |
+            ("board", GrantState::Board) |
+            ("accepted", GrantState::Accepted(_)) |
+            ("paid", GrantState::Paid(_)) |
+            ("archive", GrantState::Archived(_)) |
+            ("rejected", GrantState::Archived(_)) |
+            ("retracted", GrantState::Archived(_))|
+            ("failed", GrantState::Archived(_)) => {
+                // nothing to be done
+                return Ok(())
+            },
+            ("checking", _ ) => GrantState::Checking,
+            ("board", _ ) => GrantState::Board,
+            ("reject", _ ) => GrantState::Archived(ArchivedState::Rejected),
+            ("failed", _ ) => GrantState::Archived(ArchivedState::Failed),
+            ("retracted", _ ) => GrantState::Archived(ArchivedState::Retracted),
+            ("accepted", _) => GrantState::Accepted(amount),
+            ("paid", GrantState::Accepted(accepted)) => {
+                GrantState::Paid(accepted.clone())
+            },
+            ("funded", GrantState::Accepted(stored)) |
+            ("funded", GrantState::Paid(stored) ) => {
+                GrantState::Archived(ArchivedState::Funded(stored.clone()))
+            },
+            ("funded", _ ) => {
+                GrantState::Archived(ArchivedState::Funded(amount))
+            },
+            (key, cur) => {
+                return Err(format!("Unsupported transition {:?} => {:}", cur, key))
+            }
+        };
+
+        let when = now();
+        self.last_updated = when.clone();
+        let from = self.state.clone();
+        self.state = next.clone();
+        let act = StateActivity {
+            from,
+            to: next,
+            by: user,
+            when,
+            comment
+        };
+
+        self.activities.insert(0, act);
+        Ok(())
+    } 
+}
+
 impl<T> From<T> for GrantProcess<T>
     where T: Encode + Decode
 {
     fn from(t: T) -> Self {
-        let now = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map(|s| s.as_secs())
-            .expect("System time is always available. qed");
+        let now = now();
 
         Self {
             created: now.clone(),
@@ -443,6 +507,12 @@ impl<T> From<T> for GrantProcess<T>
             details: t,
         }
     }
+}
+
+#[derive(FromForm, Debug)]
+pub struct NextStageForm {
+    next: String,
+    comment: Option<String>
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode)]
@@ -456,6 +526,32 @@ impl Model {
         match self {
             Model::EventGrant(g) => Some(g.state.short_name()),
             Model::AktivistiGrant(g) => Some(g.state.short_name()),
+            _ => None
+        }
+    }
+
+    pub fn next_stage(&mut self, who: String, next: NextStageForm) -> Result<(), String> {
+        match self {
+            Model::EventGrant(process) =>
+                process.transition_to(
+                    &next.next,
+                    who,
+                    process.details.grant_info.amount,
+                    next.comment),
+            Model::AktivistiGrant(process) => 
+                process.transition_to(
+                    &next.next,
+                    who,
+                    process.details.grant_info.amount,
+                    next.comment),
+            _ => Err("Type unsupported for this activity".into())
+        }
+    }
+
+    pub fn title(&self) -> Option<&String> {
+        match self {
+            Model::EventGrant(g) => Some(&g.title),
+            Model::AktivistiGrant(g) => Some(&g.title),
             _ => None
         }
     }

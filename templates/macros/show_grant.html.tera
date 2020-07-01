@@ -30,36 +30,41 @@
         <h3>Kommentar</h3>
         <p>{{info.comment}}</p>
     {% endif %}
-    <div class="row">
-        <div class="column column-40">
-            <h3>Weiteres </h3>
-        </div>
-        <div class="column column-60">
-            <ul>
-                <li>{% if info.accepted_coc %}✅{% else %}❌{% endif %} Verhaltenskodex akzeptiert</li>
-                <li>{% if info.accepted_privacy %}✅{% else %}❌{% endif %} Datenschutzerklärung akzeptiert</li>
-                <li>{% if info.newsletter_fund %}✅{% else %}❌{% endif %} Radikal*Fund Newsletter </li>
-                <li>{% if info.newsletter_monthly %}✅{% else %}❌{% endif %} Monatlicher Newsletter </li>
-            </ul>
-        </div>
-    </div>
+        <ul>
+            <li>{% if info.accepted_coc %}✅{% else %}❌{% endif %} Verhaltenskodex akzeptiert</li>
+            <li>{% if info.accepted_privacy %}✅{% else %}❌{% endif %} Datenschutzerklärung akzeptiert</li>
+            <li>{% if info.newsletter_fund %}✅{% else %}❌{% endif %} Radikal*Fund Newsletter </li>
+            <li>{% if info.newsletter_monthly %}✅{% else %}❌{% endif %} Monatlicher Newsletter </li>
+        </ul>
+{% endmacro %}
+
+{% macro render_history(activities) %} 
+    {% for a in activities %}
+        <li>
+            <span class="date">
+                {{a.when | date(format="%d.%m.%Y")}}
+            </span>
+                {{self::status_icon(state=a.from)}} ⏩ {{self::status_icon(state=a.to)}} {{a.by}}
+                {% if a.comment %}
+                    <blockquote>{{a.comment}}</blockquote>
+                {% endif %}
+        </li>
+    {% endfor %}
+{% endmacro %}
+
+
+{% macro grant_status(process, uuid) %}
+    <ul>
+        <li>Status: {{self::status_icon(state=process.state)}} </li>
+        <li>Kennung: {{process.title}} ({{uuid}})</li>
+        <li>Eingegangen: {{process.created | date(format="%d. %B %Y")}}</li>
+        <li>Aktualisiert: {{process.last_updated | date(format="%d. %B %Y")}}</li>
+    </ul>
 {% endmacro %}
    
-{% macro grant_details(info, process, uuid) %}
-    <div class="row">
-        <div class="column column-60">
-            <h3>Antrag '{{process.title}}' über {{info.amount}}€ </h3>
-            <p>{{info.cost_breakdown}}</p>
-        </div>
-        <div class="column column-40">
-            <ul>
-                <li>Status: {{self::status_icon(state=process.state)}} </li>
-                <li>Kennung: {{process.title}} ({{uuid}})</li>
-                <li>Eingegangen: {{process.created | date(format="%d. %B %Y")}}</li>
-                <li>Aktualisiert: {{process.last_updated | date(format="%d. %B %Y")}}</li>
-            </ul>
-        </div>
-    </div>
+{% macro grant_details(info, process) %}
+    <h3>Antrag '{{process.title}}' über {{info.amount}}€ </h3>
+    <p>{{info.cost_breakdown}}</p>
 {% endmacro %}
 
 {% macro person_details(info, ids) %}
@@ -84,6 +89,41 @@
     <p>{{info.url}}<p>
     <hr />
     <p>{{info.why}}<p>
+{% endmacro %}
+
+{% macro next_step(process) %}
+    {% if not process.state is containing("Archived") %}
+        <form method="POST">
+            <div class="row">
+                <div class="column column-50">
+                    <h4>Update</h4>
+                </div>
+                <div class="column column-50 text-right">
+                    <button type="submit" class="button button-option" title="Zurück gezogen" name="next" value="retracted">
+                        📤
+                    </button>
+                    <button type="submit" class="button button-option" title="Ablehnen" name="next" value="rejected">
+                        ✖️
+                    </button>
+                </div>
+            </div>
+            <textarea name="comment" placeholder="optionaler Kommentar"></textarea>
+            <div class="text-right">
+                {% if process.state == "Incoming" %}
+                    <button type="submit" class="button" name="next" value="checking">
+                        📥 Prüfung starten
+                    </button>
+                {% elif process.state == "Checking" %}
+                    <button type="submit" class="button button-option" title="Ablehnen" name="next" value="rejected">
+                        ✖
+                    </button>
+                    <button type="submit" class="button" name="next" value="board">
+                        👥 Dem Board gegeben
+                    </button>
+                {% endif %}
+            </div>
+        </form>
+    {% endif %}
 {% endmacro %}
 
 {% macro bank_details(info) %}

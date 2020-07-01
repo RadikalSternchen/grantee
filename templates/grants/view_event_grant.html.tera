@@ -6,16 +6,37 @@
 {% endblock title %}
 
 {% block content %}
-    {{ show::grant_details(info=grant.details.grant_info, process=grant, uuid=uuid) }}
-    {{ show::event_details(info=grant.details.event_info) }}
-    {% if grant.details.person is containing("Detail") %}
-        {{ show::person_details(info=grant.details.person.Detail, ids=grant.details.identities)}}
-    {% else %}
-        <em>Personal information deleted</em>
-    {% endif %}
-    {% if grant.details is containing("bank") %}
-        {{ show::bank_details(info=grant.details.bank)}}
-    {% endif %}
+    <div class="row">
+        <div class="column column-60">
+            {{ show::grant_details(info=grant.details.grant_info, process=grant) }}
+            {{ show::event_details(info=grant.details.event_info) }}
+            {% if grant.details.person is containing("Detail") %}
+                {{ show::person_details(info=grant.details.person.Detail, ids=grant.details.identities)}}
+            {% else %}
+                <em>Personal information deleted</em>
+            {% endif %}
+            {% if grant.details is containing("bank") %}
+                {{ show::bank_details(info=grant.details.bank)}}
+            {% endif %}
 
-    {{ show::extra_details(info=grant.details.extra)}}
+            {{ show::extra_details(info=grant.details.extra)}}
+        </div>
+        <div class="column column-40">
+            {{ show::grant_status(process=grant, uuid=uuid) }}
+
+            {% if current_user %}
+                <hr>
+                {{show::next_step(process=grant)}}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if current_user %}
+        <hr>
+        <h3>History</h3>
+        <ul>
+            {{ show::render_history(activities=grant.activities)}}
+            <li> Eingegangen: {{grant.created | date(format="%d.%m.%Y")}}  </li>
+        </ul>
+    {% endif %}
 {% endblock %}

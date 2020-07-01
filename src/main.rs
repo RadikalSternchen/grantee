@@ -6,7 +6,7 @@ extern crate validator;
 
 use rocket::fairing::AdHoc;
 use rocket::request::{LenientForm, Form, FlashMessage};
-use rocket::response::{Flash, Redirect, status};
+use rocket::response::{Flash, Responder, Redirect, status};
 use rocket::http::{Cookie, Cookies};
 use validator::Validate;
 use parity_scale_codec::{Encode, Decode};
@@ -182,6 +182,41 @@ fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User
     Template::render("grants/list", &context)
 }
 
+#[post("/v/<id>?<next>", data = "<form>")]
+fn update_grant(
+    id: String,
+    next: Option<String>,
+    form: Form<model::NextStageForm>,
+    db: State<Database>,
+    user: auth::User,
+)  -> Result<Flash<Redirect>, status::BadRequest<Template>> {
+    let uuid = Uuid::parse_str(&id)
+        .map_err(|e|status::BadRequest(Some(render_error(e.to_string()))))?;
+    let mut grant =  get_or_404(&db, uuid.as_bytes())
+        .map_err(|e| status::BadRequest(Some(e.0)))?;
+
+    grant.next_stage(user.username().clone(), form.into_inner())
+        .map_err(|e|status::BadRequest(Some(render_error(e.to_string()))))?;
+
+    db.0.insert(uuid.as_bytes(), grant.encode())
+        .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))?;
+
+    db.0.flush()
+        .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))?;
+
+    let id = uuid.to_string();
+    let redir = match next {
+        Some(v) => Redirect::to(v),
+        None => Redirect::to(uri!(view_grant: id))
+    };
+
+    Ok(Flash::success(redir, format!(
+        "Antrag '{:}' ist jetzt '{:}'",
+        grant.title().expect("We have a grant"),
+        grant.state_name().expect("We are a grant")
+    )))
+}
+
 #[get("/v/<id>")]
 fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>, user: Option<auth::User>)
     -> Result<Template, status::NotFound<Template>>
@@ -240,6 +275,7 @@ fn main() {
 
             list,
             view_grant,
+            update_grant,
             new_event_grant_post,
             new_event_grant,
         ])

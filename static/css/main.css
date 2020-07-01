@@ -85,6 +85,15 @@ label span.error {
     font-size: 1.4rem;
 }
 
+.button-option {
+    background: transparent;
+    border-color: #aaa;
+    color: #333;
+    font-size: 1.1rem;
+    line-height: 1rem;
+    padding: 0 1.25rem;
+}
+
 /* Custom color */
 .button-black {
     background-color: black;
