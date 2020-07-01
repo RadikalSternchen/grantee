@@ -16,4 +16,6 @@
     {% if grant.details is containing("bank") %}
         {{ show::bank_details(info=grant.details.bank)}}
     {% endif %}
+
+    {{ show::extra_details(info=grant.details.extra)}}
 {% endblock %}

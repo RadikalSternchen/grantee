@@ -25,6 +25,26 @@
 {% endmacro %}
 
    
+{% macro extra_details(info) %}
+    {% if info.comment %}
+        <h3>Kommentar</h3>
+        <p>{{info.comment}}</p>
+    {% endif %}
+    <div class="row">
+        <div class="column column-40">
+            <h3>Weiteres </h3>
+        </div>
+        <div class="column column-60">
+            <ul>
+                <li>{% if info.accepted_coc %}✅{% else %}❌{% endif %} Verhaltenskodex akzeptiert</li>
+                <li>{% if info.accepted_privacy %}✅{% else %}❌{% endif %} Datenschutzerklärung akzeptiert</li>
+                <li>{% if info.newsletter_fund %}✅{% else %}❌{% endif %} Radikal*Fund Newsletter </li>
+                <li>{% if info.newsletter_monthly %}✅{% else %}❌{% endif %} Monatlicher Newsletter </li>
+            </ul>
+        </div>
+    </div>
+{% endmacro %}
+   
 {% macro grant_details(info, process, uuid) %}
     <div class="row">
         <div class="column column-60">
