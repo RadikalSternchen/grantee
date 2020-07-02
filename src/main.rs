@@ -1,9 +1,10 @@
-#![feature(proc_macro_hygiene, decl_macro)]
+#![feature(proc_macro_hygiene, decl_macro, never_type)]
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
 #[macro_use] extern crate validator_derive;
 extern crate validator;
 
+use rocket::config::ConfigError;
 use rocket::fairing::AdHoc;
 use rocket::request::{LenientForm, Form, FlashMessage};
 use rocket::response::{Flash, Responder, Redirect, status};
@@ -14,6 +15,7 @@ use uuid::Uuid;
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::default::Default;
 use sled;
 use rocket::State;
 use rocket_contrib::{
@@ -23,7 +25,29 @@ use rocket_contrib::{
 
 mod model;
 mod auth;
+mod mail;
 pub struct Database(sled::Db);
+
+// FIXME: still no proper way to render-template-to-string for emails
+//        replace when fixed https://github.com/SergioBenitez/Rocket/issues/1177
+pub struct TemplateRenderer<'a,'r>(&'a rocket::Request<'r>);
+impl <'_a, '_r> TemplateRenderer<'_a, '_r> {
+    pub fn render<S,C>(&self, name: S, context: C) -> String
+    where S: Into<std::borrow::Cow<'static, str>>, C: serde::Serialize, S: std::fmt::Display
+    {
+        use rocket_contrib::templates::Template;
+        use rocket::response::Responder;
+        let template = Template::render(name.into(), context);
+        let mut response = template.respond_to(self.0).expect("Rendering can't fail.");
+        response.body_string().unwrap_or_else(String::new)
+    }
+}
+impl<'a, 'r> rocket::request::FromRequest<'a, 'r> for TemplateRenderer<'a,'r> {
+    type Error = !;
+    fn from_request(request: &'a rocket::Request<'r>) -> rocket::request::Outcome<Self, Self::Error> {
+        rocket::request::Outcome::Success(TemplateRenderer(&request))
+    }
+}
 
 #[get("/")]
 fn index(flash: Option<FlashMessage>, user: Option<auth::User>) -> Template {
@@ -89,27 +113,44 @@ fn render_error(e: String) -> Template {
 }
 
 #[post("/event-grants/new", data = "<event>")]
-fn new_event_grant_post(event: LenientForm<model::EventGrantForm>, database: State<Database>)
-    -> Result<Flash<Redirect>, status::BadRequest<Template>>
-{
+fn new_event_grant_post(
+    event: LenientForm<model::EventGrantForm>,
+    mailer: State<mail::EmailSender>,
+    templater: TemplateRenderer,
+    database: State<Database>
+)  -> Result<Flash<Redirect>, status::BadRequest<Template>> {
     let event = event.into_inner();
     match event.validate() {
         Ok(_) => {
-            println!("all good");
             let db_item = model::Model::from(event);
             loop {
                 let id = Uuid::new_v4();
                 if database.0.contains_key(id.as_bytes()).unwrap_or(false) { continue }
 
                 return database.0.insert(id.as_bytes(), db_item.encode())
-                    .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))
-                    .map(|_| {
-                        database.0.flush();
+                    .and_then(|_| database.0.flush())
+                    .map_err(|e| e.to_string())
+                    .map(|_| uri!(view_grant: id.to_string()))
+                    .and_then(|uri| {
+                        if let Some(addr) = db_item.get_addr_info() {
+                            let mut context = Context::new();
+                            context.insert("grant", &db_item);
+                            context.insert("uri", &uri.to_string());
+                            let html = templater.render("grants/emails/angenommen", context);
+                            let subject = "Dein Radikal*Fund Antrag ist eingegangen".to_string();
+                            mail::send_email(&mailer, addr, subject, html)
+                                .map(|_| uri)
+                        } else {
+                            Ok(uri)
+                        }
+                    })
+                    .map(|uri| {
                         Flash::success(
-                            Redirect::to(uri!(view_grant: id.to_string())),
+                            Redirect::to(uri),
                             "Dein Antrag ist eingegangen. Danke!"
                         )
                     })
+                    .map_err(|e| status::BadRequest(Some(render_error(e))))
             }
         }
         Err(errors) => {
@@ -254,6 +295,14 @@ fn main() {
             let db = sled::open(db_dir)
                 .expect("Opening sled database failed");
             Ok(rocket.manage(Database(db)))
+        }))
+        .attach(AdHoc::on_attach("Email Config", |rocket| {
+            let mail = match rocket.config()
+                .get_table("mail") {
+                    Ok(t) => mail::make_lettre_transport(t),
+                    _ =>  Ok(mail::EmailSender::default())
+                }.expect("Email Setup failed");
+            Ok(rocket.manage(mail))
         }))
         .attach(AdHoc::on_attach("Login Config", |rocket| {
             let db: HashMap<String, String> = rocket.config()

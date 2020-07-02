@@ -117,6 +117,15 @@ enum Person {
     Detail(PersonalDetails), // FullInfo
 }
 
+impl Person {
+    pub fn get_addr_info(&self) -> Option<(String, String)> {
+        match self {
+            Person::Detail(d) => Some((d.email.clone(), d.name.clone())),
+            Person::Anonymised(_) => None,
+        }
+    }
+}
+
 #[derive(FromForm, Clone, Debug, Validate, Serialize, Deserialize, Encode, Default, Decode)]
 pub struct BankDetails {
     #[validate(length(min = 10))]
@@ -554,6 +563,15 @@ impl Model {
             Model::AktivistiGrant(g) => Some(&g.title),
             _ => None
         }
+    }
+
+    pub fn get_addr_info(&self) -> Option<(String, String)> {
+        match self {
+            Model::EventGrant(g) => g.details.person.get_addr_info(),
+            Model::AktivistiGrant(g) => g.details.person.get_addr_info(),
+            _ => None
+        }
+
     }
 }
 
