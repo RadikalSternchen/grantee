@@ -230,20 +230,31 @@ fn update_grant(
     form: Form<model::NextStageForm>,
     db: State<Database>,
     user: auth::User,
+    mailer: State<mail::EmailSender>,
+    templater: TemplateRenderer,
 )  -> Result<Flash<Redirect>, status::BadRequest<Template>> {
     let uuid = Uuid::parse_str(&id)
         .map_err(|e|status::BadRequest(Some(render_error(e.to_string()))))?;
     let mut grant =  get_or_404(&db, uuid.as_bytes())
         .map_err(|e| status::BadRequest(Some(e.0)))?;
 
-    grant.next_stage(user.username().clone(), form.into_inner())
+    let notification = grant.next_stage(user.username().clone(), form.into_inner())
         .map_err(|e|status::BadRequest(Some(render_error(e.to_string()))))?;
 
     db.0.insert(uuid.as_bytes(), grant.encode())
+        .and_then(|_| db.0.flush())
         .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))?;
 
-    db.0.flush()
-        .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))?;
+    notification.and_then(|(subject, path)| {
+        grant.get_addr_info().map(|addr| {
+            let mut context = Context::new();
+            context.insert("grant", &grant);
+            context.insert("uuid", &uuid.to_string());
+            let html = templater.render(path, context);
+            mail::send_email(&mailer, addr, subject, html)
+                .map(|_| ())
+        })
+    });
 
     let id = uuid.to_string();
     let redir = match next {

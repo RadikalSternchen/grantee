@@ -1,6 +1,21 @@
 
 {% macro status_icon(state) %}
-    {% if state == "Draft" %}
+    {% if state is containing ("Archived") %}
+        <span title="Archiviert">🗄️</span>
+        {% if state.Archived is containing ("Funded") %}
+            <span title="Ausgezahlt">✅ {{state.Archived.Funded}}€</span> 
+        {% elif state.Archived == "Retracted" %}
+            <span title="Zurückgezogen">📤</span>    
+        {% elif state.Archived == "Rejected" %}
+            <span title="Abgelehnt">🚫</span>
+        {% elif state.Archived == "Failed" %}
+            <span title="Abgelehnt">❌</span>
+        {% endif %}
+    {% elif state is containing ("Accepted") %}
+        <span title="accepted">✔️</span>
+    {% elif state is containing ("Paid") %}
+        <span title="paid">💸✔️</span>
+    {% elif state == "Draft" %}
         <span title="draft">⚪</span>
     {% elif state == "Incoming" %}
         <span title="incoming">🔵</span>
@@ -99,6 +114,9 @@
                     <h4>Update</h4>
                 </div>
                 <div class="column column-50 text-right">
+                    <label style="display: inline;" for="send_mail">
+                        <input type="checkbox" id="send_mail" name="send_mail" checked /> 📨
+                    </label>
                     <button type="submit" class="button button-option" title="Zurück gezogen" name="next" value="retracted">
                         📤
                     </button>
@@ -119,6 +137,21 @@
                     </button>
                     <button type="submit" class="button" name="next" value="board">
                         👥 Dem Board gegeben
+                    </button>
+                {% elif process.state == "Board" %}
+                    <button type="submit" class="button button-option" title="Failed" name="next" value="failed">
+                        ✖
+                    </button>
+                    <button type="submit" class="button" name="next" value="accepted">
+                        💰 gefundet
+                    </button>
+                {% elif process.state is containing ("Accepted") %}
+                    <button type="submit" class="button" name="next" value="paid">
+                        💸 bezahlt
+                    </button>
+                {% elif process.state is containing ("Paid") %}
+                    <button type="submit" class="button" name="next" value="archive">
+                        🗄️ archivieren
                     </button>
                 {% endif %}
             </div>

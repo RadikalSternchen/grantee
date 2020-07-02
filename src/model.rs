@@ -447,7 +447,7 @@ fn now() -> u64 {
 
 impl<T: Encode + Decode> GrantProcess<T> {
     pub fn transition_to(&mut self, next_stage: &str, user: String, amount: u32, comment: Option<String>)
-        -> Result<(), String>
+        -> Result<Option<(String, String)>, String>
     {
         let next = match (next_stage, &self.state) {
             ("draft", GrantState::Draft) |
@@ -461,7 +461,7 @@ impl<T: Encode + Decode> GrantProcess<T> {
             ("retracted", GrantState::Archived(_))|
             ("failed", GrantState::Archived(_)) => {
                 // nothing to be done
-                return Ok(())
+                return Ok(None)
             },
             ("checking", _ ) => GrantState::Checking,
             ("board", _ ) => GrantState::Board,
@@ -484,6 +484,22 @@ impl<T: Encode + Decode> GrantProcess<T> {
             }
         };
 
+        let res = match next {
+            GrantState::Paid(_) => Some((
+                "Dein Radikal*Fund Antrag wurde bewilligt, das Geld ist unterwegs".to_string(),
+                "grants/emails/ausgezahlt".to_string()
+            )),
+            GrantState::Archived(ArchivedState::Rejected) => Some((
+                "Dein Radikal*Fund Antrag wurde abgelehnt".to_string(),
+                "grants/emails/abgelehnt".to_string()
+            )),
+            GrantState::Archived(ArchivedState::Failed) => Some((
+                "Dein Radikal*Fund Antrag wurde nicht gefundet".to_string(),
+                "grants/emails/not_funded".to_string()
+            )),
+            _ => None
+        };
+
         let when = now();
         self.last_updated = when.clone();
         let from = self.state.clone();
@@ -497,7 +513,7 @@ impl<T: Encode + Decode> GrantProcess<T> {
         };
 
         self.activities.insert(0, act);
-        Ok(())
+        Ok(res)
     } 
 }
 
@@ -521,7 +537,8 @@ impl<T> From<T> for GrantProcess<T>
 #[derive(FromForm, Debug)]
 pub struct NextStageForm {
     next: String,
-    comment: Option<String>
+    comment: Option<String>,
+    send_mail: bool,
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode)]
@@ -539,7 +556,9 @@ impl Model {
         }
     }
 
-    pub fn next_stage(&mut self, who: String, next: NextStageForm) -> Result<(), String> {
+    pub fn next_stage(&mut self, who: String, next: NextStageForm)
+        -> Result<Option<(String, String)>, String>
+    {
         match self {
             Model::EventGrant(process) =>
                 process.transition_to(
