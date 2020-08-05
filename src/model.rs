@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::time::SystemTime;
 use rand::thread_rng;
 use rand::seq::SliceRandom;
+use blake2::{Blake2b, Digest};
 
 // A trait that the Validate derive will impl
 use validator::{Validate, ValidationError};
@@ -122,6 +123,26 @@ impl Person {
         match self {
             Person::Detail(d) => Some((d.email.clone(), d.name.clone())),
             Person::Anonymised(_) => None,
+        }
+    }
+
+    pub fn id(&self) -> String {
+        match self {
+            Person::Detail(d) => {
+                format!("{:x}", Blake2b::new()
+                    .chain(d.email.replace(" ", "").to_lowercase().as_bytes())
+                    .finalize()
+                )
+            }
+            Person::Anonymised(a) => a.clone(),
+        }
+    }
+    pub fn archive(&mut self) {
+        match self {
+            Person::Detail(_) =>  {
+                *self = Person::Anonymised(self.id())
+            }
+            _ => {}
         }
     }
 }
@@ -284,12 +305,47 @@ impl<'f> FromForm<'f> for AktivistiGrantForm {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+pub enum Bank {
+    Anonymised(String), // storing the hash of the E-Mail
+    Detail(BankDetails), // FullInfo
+}
+
+impl Bank { 
+    pub fn id(&self) -> String {
+        match self {
+            Bank::Detail(d) => {
+                format!("{:x}", Blake2b::new()
+                    .chain(d.iban.replace(" ", "").to_lowercase().as_bytes())
+                    .finalize()
+                )
+            }
+            Bank::Anonymised(a) => a.clone(),
+        }
+    }
+    pub fn archive(&mut self) {
+        match self {
+            Bank::Detail(_) =>  {
+                *self = Bank::Anonymised(self.id())
+            }
+            _ => {}
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct AktivistiGrantDetails {
     grant_info: GrantInfo,
     person: Person,
     identities: Vec<Identity>,
-    bank: Option<BankDetails>,
+    bank: Bank,
     extra: ExtraInfo,
+}
+
+impl Archivable for AktivistiGrantDetails {
+    fn archive(&mut self) {
+        self.person.archive();
+        self.bank.archive();
+    }
 }
 
 impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
@@ -298,7 +354,7 @@ impl From<AktivistiGrantForm>  for  AktivistiGrantDetails {
             grant_info: a.grant_info,
             person: Person::Detail(a.person),
             identities: a.identities,
-            bank: Some(a.bank),
+            bank: Bank::Detail(a.bank),
             extra: a.extra,
         }
     }
@@ -357,8 +413,15 @@ pub struct EventGrantDetails {
     event_info: EventInfo,
     person: Person,
     identities: Vec<Identity>,
-    bank: Option<BankDetails>,
+    bank: Bank,
     extra: ExtraInfo,
+}
+
+impl Archivable for EventGrantDetails {
+    fn archive(&mut self) {
+        self.person.archive();
+        self.bank.archive();
+    }
 }
 
 impl From<EventGrantForm> for EventGrantDetails {
@@ -368,7 +431,7 @@ impl From<EventGrantForm> for EventGrantDetails {
             event_info: a.event_info,
             person: Person::Detail(a.person),
             identities: a.identities,
-            bank: Some(a.bank),
+            bank: Bank::Detail(a.bank),
             extra: a.extra
         }
     }
@@ -380,14 +443,28 @@ pub type Username = String;
 pub type TimeStamp = u64;  
 
 #[derive(Encode, Clone, Serialize, Deserialize, Decode, Debug)]
+pub enum RejectionReason {
+    /// We had no money to fund this anymore
+    OutOfMoney,
+    /// Ran against the Quota
+    OutOfQuota,
+    /// We had a formal reason, specified Option
+	#[codec(index = "250")]
+    Formal(String),
+    /// We had anoter reason, specified Option
+	#[codec(index = "251")]
+    Other(String),
+}
+
+#[derive(Encode, Clone, Serialize, Deserialize, Decode, Debug)]
 /// Archived States are anonymised
 pub enum ArchivedState {
     /// This was accepted, amount X was paid – full Euros
     Funded(u32),
     /// This was retracted by the submitter
     Retracted,
-    /// This was on formal grounds
-    Rejected,
+    /// This was dismissed on formal grounds, information given
+    Rejected(RejectionReason),
     /// This failed to be funded by the board
     Failed,
 }
@@ -428,8 +505,12 @@ pub struct StateActivity {
     comment: Option<String>
 }
 
+pub trait Archivable {
+    fn archive(&mut self);
+}
+
 #[derive(Serialize, Clone, Deserialize, Encode, Decode)]
-pub struct GrantProcess<T: Encode + Decode> {
+pub struct GrantProcess<T: Encode + Decode + Archivable> {
     created: TimeStamp,
     last_updated: TimeStamp,
     title: String,
@@ -445,7 +526,7 @@ fn now() -> u64 {
             .expect("System time is always available. qed")
 }
 
-impl<T: Encode + Decode> GrantProcess<T> {
+impl<T: Encode + Decode + Archivable> GrantProcess<T> {
     pub fn transition_to(&mut self, next_stage: &str, user: String, amount: u32, comment: Option<String>)
         -> Result<Option<(String, String)>, String>
     {
@@ -465,7 +546,22 @@ impl<T: Encode + Decode> GrantProcess<T> {
             },
             ("checking", _ ) => GrantState::Checking,
             ("board", _ ) => GrantState::Board,
-            ("reject", _ ) => GrantState::Archived(ArchivedState::Rejected),
+            ("outofmoney", _ ) => GrantState::Archived(
+                    ArchivedState::Rejected(
+                        RejectionReason::OutOfMoney
+                    )),
+            ("outofquota", _ ) => GrantState::Archived(
+                    ArchivedState::Rejected(
+                        RejectionReason::OutOfQuota
+                    )),
+            ("reject", _ ) => GrantState::Archived(
+                    ArchivedState::Rejected(
+                        RejectionReason::Other(comment.clone().unwrap_or_default())
+                    )),
+            ("formal_reject", _ ) => GrantState::Archived(
+                    ArchivedState::Rejected(
+                        RejectionReason::Formal(comment.clone().unwrap_or_default())
+                    )),
             ("failed", _ ) => GrantState::Archived(ArchivedState::Failed),
             ("retracted", _ ) => GrantState::Archived(ArchivedState::Retracted),
             ("accepted", _) => GrantState::Accepted(amount),
@@ -473,7 +569,7 @@ impl<T: Encode + Decode> GrantProcess<T> {
                 GrantState::Paid(accepted.clone())
             },
             ("funded", GrantState::Accepted(stored)) |
-            ("funded", GrantState::Paid(stored) ) => {
+            ("arcbive", GrantState::Paid(stored) ) => {
                 GrantState::Archived(ArchivedState::Funded(stored.clone()))
             },
             ("funded", _ ) => {
@@ -489,7 +585,7 @@ impl<T: Encode + Decode> GrantProcess<T> {
                 "Dein Radikal*Fund Antrag wurde bewilligt, das Geld ist unterwegs".to_string(),
                 "grants/emails/ausgezahlt".to_string()
             )),
-            GrantState::Archived(ArchivedState::Rejected) => Some((
+            GrantState::Archived(ArchivedState::Rejected(_)) => Some((
                 "Dein Radikal*Fund Antrag wurde abgelehnt".to_string(),
                 "grants/emails/abgelehnt".to_string()
             )),
@@ -498,6 +594,13 @@ impl<T: Encode + Decode> GrantProcess<T> {
                 "grants/emails/not_funded".to_string()
             )),
             _ => None
+        };
+
+        match next {
+            GrantState::Archived(_) => {
+                self.details.archive();
+            },
+            _ => {}
         };
 
         let when = now();
@@ -518,7 +621,7 @@ impl<T: Encode + Decode> GrantProcess<T> {
 }
 
 impl<T> From<T> for GrantProcess<T>
-    where T: Encode + Decode
+    where T: Encode + Decode + Archivable
 {
     fn from(t: T) -> Self {
         let now = now();
@@ -590,7 +693,13 @@ impl Model {
             Model::AktivistiGrant(g) => g.details.person.get_addr_info(),
             _ => None
         }
+    }
 
+    pub fn get_rel_ids(&self) -> (String, String) {
+        match self {
+            Model::EventGrant(g) => { (g.details.person.id(), g.details.bank.id()) },
+            Model::AktivistiGrant(g) =>  { (g.details.person.id(), g.details.bank.id()) },
+        }
     }
 }
 
