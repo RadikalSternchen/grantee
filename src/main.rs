@@ -323,11 +323,11 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
 }
 
 fn main() {
-    setup().launch();
+    setup(rocket::ignite()).launch();
 }
 
-fn setup() -> rocket::Rocket {
-    rocket::ignite()
+fn setup(rocket: rocket::Rocket) -> rocket::Rocket {
+    rocket
         .attach(Template::fairing())
         .attach(AdHoc::on_attach("Database Config", |rocket| {
             let db_dir = rocket.config()
@@ -376,37 +376,192 @@ fn setup() -> rocket::Rocket {
 #[cfg(test)]
 mod test {
     use super::setup;
-    use rocket::local::Client;
+    use url::form_urlencoded::Serializer;
+    use tempfile::{tempdir, TempDir};
+    use rocket::local::{Client, LocalResponse};
+    use std::collections::{BTreeMap, HashMap};
     use rocket::http::{ContentType, Status};
+    use rocket::config::{Config, Environment};
+    use select;
 
-    fn admin_client() -> Client {
-        let client = Client::new(setup()).expect("client setup works");
+    struct TestClient {
+        client: Client,
+        _dir: TempDir
+    }
+
+    impl TestClient {
+        fn new() -> TestClient {
+            let tmpd = tempdir().expect("Creating tempdir failed");
+            let mut config = Config::build(Environment::Staging)
+                .address("127.0.0.1")
+                .port(700)
+                .workers(1)
+                .unwrap();
+
+            let mut extras = HashMap::new();
+            let mut users = BTreeMap::new();
+            users.insert("admin".to_string(), "test".to_string());
+            extras.insert("database".to_string(), tmpd.path().to_str().unwrap().into());
+            extras.insert("users".to_string(), users.into());
+
+            config.set_extras(extras);
+            let client = Client::new(setup(rocket::custom(config))).expect("client setup works");
+
+            TestClient {
+                client,
+                _dir: tmpd,
+            }
+            
+        }
+    }
+
+    fn default_event_grand_fields() -> Vec<(&'static str, &'static str)> {
+        vec![ // minimal fields
+            // grant info
+            ("grant_amount", "150"),
+            ("grant_cost_breakdown", "Bahnfahrt"),
+
+            // event info
+            ("event_name", "radikal.jetzt workshop"),
+            ("event_description", "Awesome Workshop, den wo es geht"),
+            ("event_organiser", "radikal.jetzt"),
+            ("event_why", "Weil geil."),
+
+            // person 
+            ("person_name", "ben"),
+            ("person_about_me", "it's me, mario"),
+            ("person_email", "ben@example.org"),
+
+            // bank info
+            ("bank_iban", "DE 1234 5678 42"),
+
+            // required extra
+            ("extra_accepted_privacy", "true"),
+            ("extra_accepted_coc",  "true"),
+        ]
+    }
+
+    fn admin_client() -> TestClient {
+        let tc = TestClient::new();
         {
-            let req = client
+            let req = tc.client
                 .post("/login")
-                .body("username=ben&password=password")
+                .body("username=admin&password=test")
                 .header(ContentType::Form);
             let response = req.dispatch();
 
             assert_eq!(response.status(), Status::SeeOther);
         }
-        client
+        tc
+    }
+
+    fn items_count(client: &Client, path: Option<&'static str>) -> usize {
+        let mut resp = client.get(path.unwrap_or("/list")).dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        let list = select::document::Document::from_read(resp.body().unwrap().into_inner()).unwrap();
+        list.find(select::predicate::Name("li")).into_selection().len() // be more specific
     }
 
     #[test]
     fn smoketest() {
-        let client = Client::new(setup()).expect("client setup works");
-        let req = client.get("/");
+        let tc = TestClient::new();
+        let req = tc.client.get("/");
         let response = req.dispatch();
 
         assert_eq!(response.status(), Status::Ok);
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(default_event_grand_fields().iter())
+                .finish()
+            )
+            .dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
+
+
+        // works if unknown fields are submitted
+        let mut bad_params = Serializer::new(String::new());
+        bad_params.extend_pairs(default_event_grand_fields().iter());
+        bad_params.append_pair("this_doesnt_exist", "false");
+        
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(bad_params.finish())
+            .dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
+
+    }
+
+    #[test]
+    fn required_event_grant_fields() {
+        let tc = TestClient::new();
+        let req = tc.client.get("/");
+        let response = req.dispatch();
+
+        assert_eq!(response.status(), Status::Ok);
+        let params = default_event_grand_fields();
+        for x in 0..params.len() {
+            let mut local_params = params.clone();
+            let item = local_params.remove(x); // dropping an item
+
+            let resp = tc.client.post("/event-grants/new")
+                .header(ContentType::Form)
+                .body(Serializer::new(String::new())
+                    .extend_pairs(local_params.iter())
+                    .finish())
+                .dispatch();
+            assert_eq!(resp.status(), Status::BadRequest, "Worked despite {:?} missing", item);
+        };
+
+        // but all there works
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(params.iter())
+                .finish())
+            .dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
     }
 
     #[test]
     fn can_admin() {
-        let client = admin_client();
-        let resp = client.get("/list").dispatch();
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
 
         assert_eq!(resp.status(), Status::Ok);
+    }
+
+
+    #[test]
+    fn regular_flow() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+    }
+
+
+    #[test]
+    fn submits_are_lisited() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        for x in 1..5 {
+            // submitting one
+            let resp = tc.client.post("/event-grants/new")
+                .header(ContentType::Form)
+                .body(Serializer::new(String::new())
+                    .extend_pairs(default_event_grand_fields().iter())
+                    .finish()
+                )
+                .dispatch();
+            assert_eq!(resp.status(), Status::SeeOther);
+            
+            assert_eq!(items_count(&tc.client, None), x);
+        }
     }
 }
