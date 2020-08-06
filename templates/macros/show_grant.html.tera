@@ -36,7 +36,7 @@
     {% set entry = item.EventGrant %}
     {% set icon = "📆" %}
 {% endif %}
-<a href="/v/{{id}}">{{icon}} '{{entry.title}}'' über {{entry.details.grant_info.amount}}€</a>
+<a data-grant-id="{{id}}" href="/v/{{id}}">{{icon}} '{{entry.title}}'' über {{entry.details.grant_info.amount}}€</a>
 {% endmacro %}
 
    

@@ -6,7 +6,7 @@
     <h4>{{title}} ({{entries[key] | length}})</h4>
     <ul>
     {% for e in entries[key] %}
-        <li>{{show::link_to(id=e.0, item=e.1)}}</li>
+        <li class="grant-item">{{show::link_to(id=e.0, item=e.1)}}</li>
     {% endfor %}
     </ul>
 {% else %}

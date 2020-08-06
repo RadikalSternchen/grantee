@@ -217,12 +217,12 @@ fn default_context(flash: Option<FlashMessage>, user: Option<auth::User>) -> Con
 
 #[get("/list")]
 fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User)
-    -> Result<Template, status::NotFound<Template>> //  FIXME: proper error code
+    -> Result<Template, status::BadRequest<Template>> //  FIXME: proper error code
 {
     let mut context = default_context(flash, Some(user));
 
     let entries = database.0.get(IDX_OPEN_GRANTS.as_bytes())
-        .map_err(|e| status::NotFound(render_error(e.to_string())))?
+        .map_err(|e| status::BadRequest(Some(render_error(e.to_string()))))?
         .and_then(|idx_ival| Index::decode(&mut idx_ival.as_ref()).ok())
         .unwrap_or_default()
         .iter()
@@ -382,6 +382,7 @@ mod test {
     use std::collections::{BTreeMap, HashMap};
     use rocket::http::{ContentType, Status};
     use rocket::config::{Config, Environment};
+    use select::predicate::{Predicate, Name, Attr, Class};
     use select;
 
     struct TestClient {
@@ -460,7 +461,11 @@ mod test {
 
         assert_eq!(resp.status(), Status::Ok);
         let list = select::document::Document::from_read(resp.body().unwrap().into_inner()).unwrap();
-        list.find(select::predicate::Name("li")).into_selection().len() // be more specific
+        list.find(Class("grant-item").and(Name("li")).child(
+                Name("a").and(Attr("data-grant-id", ())))
+            )
+        .into_selection()
+        .len()
     }
 
     #[test]
