@@ -322,8 +322,11 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
     }
 }
 
-
 fn main() {
+    setup().launch();
+}
+
+fn setup() -> rocket::Rocket {
     rocket::ignite()
         .attach(Template::fairing())
         .attach(AdHoc::on_attach("Database Config", |rocket| {
@@ -368,5 +371,42 @@ fn main() {
             new_event_grant_post,
             new_event_grant,
         ])
-        .launch();
+}
+
+#[cfg(test)]
+mod test {
+    use super::setup;
+    use rocket::local::Client;
+    use rocket::http::{ContentType, Status};
+
+    fn admin_client() -> Client {
+        let client = Client::new(setup()).expect("client setup works");
+        {
+            let req = client
+                .post("/login")
+                .body("username=ben&password=password")
+                .header(ContentType::Form);
+            let response = req.dispatch();
+
+            assert_eq!(response.status(), Status::SeeOther);
+        }
+        client
+    }
+
+    #[test]
+    fn smoketest() {
+        let client = Client::new(setup()).expect("client setup works");
+        let req = client.get("/");
+        let response = req.dispatch();
+
+        assert_eq!(response.status(), Status::Ok);
+    }
+
+    #[test]
+    fn can_admin() {
+        let client = admin_client();
+        let resp = client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+    }
 }
