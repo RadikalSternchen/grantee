@@ -26,7 +26,11 @@ use rocket_contrib::{
 mod model;
 mod auth;
 mod mail;
+
 pub struct Database(sled::Db);
+pub type Index = Vec<[u8; 16]>;
+
+pub const IDX_OPEN_GRANTS: &'static str  = "grants_open";
 
 // FIXME: still no proper way to render-template-to-string for emails
 //        replace when fixed https://github.com/SergioBenitez/Rocket/issues/1177
@@ -125,10 +129,23 @@ fn new_event_grant_post(
             let db_item = model::Model::from(event);
             loop {
                 let id = Uuid::new_v4();
-                if database.0.contains_key(id.as_bytes()).unwrap_or(false) { continue }
+                if database.0.transaction::<_, (), ()>(|db| {
+                    if db.insert(id.as_bytes(), db_item.encode())?.is_some() {
+                        return Err(sled::transaction::ConflictableTransactionError::Conflict);
+                    }
 
-                return database.0.insert(id.as_bytes(), db_item.encode())
-                    .and_then(|_| database.0.flush())
+                    let idx_ival = db.get(IDX_OPEN_GRANTS.as_bytes())?.unwrap_or_default();
+                    let mut idx = Index::decode(&mut idx_ival.as_ref()).unwrap_or_default();
+                    idx.push(*id.as_bytes());
+                    db.insert(IDX_OPEN_GRANTS.as_bytes(), idx.encode())?;
+
+                    Ok(())
+                }).is_err() {
+                    // let's try again
+                    continue
+                }
+
+                return database.0.flush()
                     .map_err(|e| e.to_string())
                     .map(|_| uri!(view_grant: id.to_string()))
                     .and_then(|uri| {
@@ -200,27 +217,39 @@ fn default_context(flash: Option<FlashMessage>, user: Option<auth::User>) -> Con
 
 #[get("/list")]
 fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User)
-    -> Template
+    -> Result<Template, status::NotFound<Template>> //  FIXME: proper error code
 {
     let mut context = default_context(flash, Some(user));
-    let entries = database.0.iter()
-    .filter_map(|r|r.ok())
-    .filter_map(|(uuid, val)|
-        Uuid::from_slice(uuid.as_ref())
-            .ok()
-            .and_then(|u| model::Model::decode(&mut val.as_ref()).map(|m| (u.to_string(), m)).ok())
-    ).fold(HashMap::<&'static str, Vec<(String, model::Model)>>::new(), 
-    |mut m, (uuid, model)| {
-        if let Some(target) = model.state_name() {
-            match m.entry(target) {
-                Entry::Occupied(mut o) => { o.get_mut().push((uuid, model)); },
-                Entry::Vacant(v) => { v.insert(vec![(uuid, model)]); }
+
+    let entries = database.0.get(IDX_OPEN_GRANTS.as_bytes())
+        .map_err(|e| status::NotFound(render_error(e.to_string())))?
+        .and_then(|idx_ival| Index::decode(&mut idx_ival.as_ref()).ok())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(| uuid | Uuid::from_slice(uuid.as_ref()).ok())
+        .filter_map(| uuid |
+            database.0.get(uuid.as_bytes())
+                .ok()
+                .and_then(|val_o| val_o.map(|val| (uuid, val)))
+        )
+        .filter_map(| (u, val)|
+            model::Model::decode(&mut val.as_ref())
+                .map(|m| (u.to_string(), m))
+                .ok()
+        )
+        .fold(HashMap::<&'static str, Vec<(String, model::Model)>>::new(), 
+            |mut m, (uuid, model)| {
+                if let Some(target) = model.state_name() {
+                    match m.entry(target) {
+                        Entry::Occupied(mut o) => { o.get_mut().push((uuid, model)); },
+                        Entry::Vacant(v) => { v.insert(vec![(uuid, model)]); }
+                    }
+                }
+                m
             }
-        }
-        m
-    });
+        );
     context.insert("entries", &entries);
-    Template::render("grants/list", &context)
+    Ok(Template::render("grants/list", &context))
 }
 
 #[post("/v/<id>?<next>", data = "<form>")]
