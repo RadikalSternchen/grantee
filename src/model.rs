@@ -650,6 +650,17 @@ pub enum Model {
     EventGrant(GrantProcess<EventGrantDetails>),
 }
 
+impl std::fmt::Debug for Model {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Model::EventGrant(_) => f.debug_struct("EventGrant"),
+            Model::AktivistiGrant(_) => f.debug_struct("AktivstiGrant"),
+        }
+         .field("title", &self.title().expect("We have a title"))
+         .finish()
+    }
+}
+
 impl Model {
     pub fn state_name(&self) -> Option<&'static str> {
         match self {

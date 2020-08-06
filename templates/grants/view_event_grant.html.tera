@@ -27,8 +27,14 @@
             {{ show::grant_status(process=grant, uuid=uuid) }}
 
             {% if current_user %}
-                <hr>
+                <hr />
                 {{show::next_step(process=grant)}}
+                <hr />
+                <ul>
+                    {% for e in related %}
+                        <li class="grant-item">{{show::link_to(id=e.0, item=e.1)}}</li>
+                    {% endfor %}
+                </ul>
             {% endif %}
         </div>
     </div>

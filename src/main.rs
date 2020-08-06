@@ -31,6 +31,7 @@ pub struct Database(sled::Db);
 pub type Index = Vec<[u8; 16]>;
 
 pub const IDX_OPEN_GRANTS: &'static str  = "grants_open";
+pub const REL_GRANTS_PREFIX: &'static str  = "related_";
 
 // FIXME: still no proper way to render-template-to-string for emails
 //        replace when fixed https://github.com/SergioBenitez/Rocket/issues/1177
@@ -134,10 +135,17 @@ fn new_event_grant_post(
                         return Err(sled::transaction::ConflictableTransactionError::Conflict);
                     }
 
-                    let idx_ival = db.get(IDX_OPEN_GRANTS.as_bytes())?.unwrap_or_default();
-                    let mut idx = Index::decode(&mut idx_ival.as_ref()).unwrap_or_default();
-                    idx.push(*id.as_bytes());
-                    db.insert(IDX_OPEN_GRANTS.as_bytes(), idx.encode())?;
+                    let (id1, id2) = db_item.get_rel_ids();
+                    for field in vec![
+                        IDX_OPEN_GRANTS.as_bytes(),
+                        format!("{}{}", REL_GRANTS_PREFIX, id1).as_bytes(),
+                        format!("{}{}", REL_GRANTS_PREFIX, id2).as_bytes(),
+                    ] {
+                        let idx_ival = db.get(field)?.unwrap_or_default();
+                        let mut idx = Index::decode(&mut idx_ival.as_ref()).unwrap_or_default();
+                        idx.push(*id.as_bytes());
+                        db.insert(field, idx.encode())?;
+                    }
 
                     Ok(())
                 }).is_err() {
@@ -303,10 +311,43 @@ fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>
     -> Result<Template, status::NotFound<Template>>
 {
     let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
-    let grant =  get_or_404(&database, uuid.as_bytes())?;
-    
+    let grant = get_or_404(&database, uuid.as_bytes())?;
+    let with_related = user.is_some();
+
     let mut context = default_context(flash, user);
     context.insert("uuid", &uuid.to_string());
+    
+    if with_related {
+        let (id1, id2) = grant.get_rel_ids();
+        let mut related = Vec::new();
+
+        for field in vec![
+            format!("{}{}", REL_GRANTS_PREFIX, id1).as_bytes(),
+            format!("{}{}", REL_GRANTS_PREFIX, id2).as_bytes(),
+        ] {
+            let idx_ival = database.0.get(field)
+                .map_err(|e|status::NotFound(render_error(e.to_string())))?.unwrap_or_default();
+            related.extend_from_slice(&Index::decode(&mut idx_ival.as_ref()).unwrap_or_default()[..]);
+        }
+        
+        related.dedup();
+        context.insert("related", &related
+            .iter()
+            .filter_map(| uuid | Uuid::from_slice(uuid.as_ref()).ok())
+            .filter_map(| ext | { if uuid == ext { None } else { Some(ext) } })
+            .filter_map(| uuid |
+                database.0.get(uuid.as_bytes())
+                    .ok()
+                    .and_then(|val_o| val_o.map(|val| (uuid, val)))
+            )
+            .filter_map(| (u, val)|
+                model::Model::decode(&mut val.as_ref())
+                    .map(|m| (u.to_string(), m))
+                    .ok()
+            )
+            .collect::<Vec<_>>()
+        )
+    }
 
     match grant {
         model::Model::EventGrant(g) => {
@@ -385,6 +426,8 @@ mod test {
     use select::predicate::{Predicate, Name, Attr, Class};
     use select;
 
+    type Params = Vec<(&'static str, &'static str)>;
+
     struct TestClient {
         client: Client,
         _dir: TempDir
@@ -416,7 +459,7 @@ mod test {
         }
     }
 
-    fn default_event_grand_fields() -> Vec<(&'static str, &'static str)> {
+    fn default_event_grand_fields() -> Params {
         vec![ // minimal fields
             // grant info
             ("grant_amount", "150"),
@@ -442,6 +485,22 @@ mod test {
         ]
     }
 
+    fn with_field(params: &mut Params, field: &'static str, value: &'static str) {
+        let mut found: Option<usize> = None;
+
+        for (idx, val) in params.iter().enumerate() {
+            if val.0 == field {
+                found = Some(idx);
+                break
+            }
+        }
+        if let Some(idx) = found {
+            params.remove(idx);
+        }
+
+        params.push((field, value))
+    } 
+
     fn admin_client() -> TestClient {
         let tc = TestClient::new();
         {
@@ -456,7 +515,7 @@ mod test {
         tc
     }
 
-    fn items_count(client: &Client, path: Option<&'static str>) -> usize {
+    fn items_count(client: &Client, path: Option<&str>) -> usize {
         let mut resp = client.get(path.unwrap_or("/list")).dispatch();
 
         assert_eq!(resp.status(), Status::Ok);
@@ -538,6 +597,91 @@ mod test {
         assert_eq!(resp.status(), Status::Ok);
     }
 
+    #[test]
+    fn related_grants() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+
+        let mut main_info = default_event_grand_fields();
+        with_field(&mut main_info, "person_email", "test@example.org");
+        with_field(&mut main_info, "bank_iban", "OG00 12345 6789");
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(main_info.iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get("Location").next().expect("Location must be present");
+
+        assert_eq!(items_count(&tc.client, Some(location.clone())), 0); // none
+
+        let mut grant_info = default_event_grand_fields();
+        with_field(&mut grant_info, "person_email", "test@example.org");
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(grant_info.iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+
+        assert_eq!(items_count(&tc.client, Some(location.clone())), 1); // same email
+
+        let mut grant_info = default_event_grand_fields();
+        with_field(&mut grant_info, "bank_iban", "OG00 12345 6789");
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(grant_info.iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+
+        assert_eq!(items_count(&tc.client, Some(location.clone())), 2); // same iban
+
+        let mut grant_info = default_event_grand_fields();
+        with_field(&mut grant_info, "bank_iban", "OG00 12345 1234");
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(grant_info.iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+
+        assert_eq!(items_count(&tc.client, Some(location.clone())), 2); // differnt iban
+
+        let mut grant_info = default_event_grand_fields();
+        with_field(&mut grant_info, "person_email", "test@example.com");
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(grant_info.iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+
+        assert_eq!(items_count(&tc.client, Some(location.clone())), 2); // different email
+    
+    }
 
     #[test]
     fn regular_flow() {
@@ -559,9 +703,7 @@ mod test {
 
         let resp = tc.client.get(location).dispatch();
         assert_eq!(resp.status(), Status::Ok);
-
     }
-
 
     #[test]
     fn submits_are_lisited() {
