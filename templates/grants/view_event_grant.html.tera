@@ -15,8 +15,10 @@
             {% else %}
                 <em>Personal information deleted</em>
             {% endif %}
-            {% if grant.details is containing("bank") %}
-                {{ show::bank_details(info=grant.details.bank)}}
+            {% if grant.details.ban is containing("Detail") %}
+                {{ show::bank_details(info=grant.details.bank.Detail)}}
+            {% else %}
+                <em>Bank information deleted</em>
             {% endif %}
 
             {{ show::extra_details(info=grant.details.extra)}}

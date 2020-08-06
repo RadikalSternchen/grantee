@@ -545,6 +545,21 @@ mod test {
         let resp = tc.client.get("/list").dispatch();
 
         assert_eq!(resp.status(), Status::Ok);
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(default_event_grand_fields().iter())
+                .finish()
+            )
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get("Location").next().expect("Location must be present");
+
+        let resp = tc.client.get(location).dispatch();
+        assert_eq!(resp.status(), Status::Ok);
+
     }
 
 
