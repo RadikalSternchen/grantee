@@ -22,6 +22,10 @@
 
 {% block content %}
 
+{% if show_pending %}
+    {{self::section(title="Eingangen", key="pending", entries=entries)}}
+{% endif %}
+
 {{self::section(title="Eingangen", key="incoming", entries=entries)}}
 
 {{self::section(title="In Prüfung", key="checking", entries=entries)}}
@@ -32,6 +36,8 @@
 
 {{self::section(title="Ausgezahlt", key="paid", entries=entries)}}
 
-{{self::section(title="Archiviert", key="archived", entries=entries)}}
+{% if show_archived %}
+    {{self::section(title="Archiviert", key="archived", entries=entries)}}
+{% endif %}
 
 {% endblock %}

@@ -63,7 +63,7 @@ fn index(flash: Option<FlashMessage>, user: Option<auth::User>) -> Template {
 
 #[get("/login")]
 fn already_logged_in(_user: auth::User) -> Redirect {
-    Redirect::to(uri!(list))
+    Redirect::to("/list")
 }
 
 #[get("/logout")]
@@ -89,7 +89,7 @@ fn post_login(login: Form<auth::LoginForm>, db: State<auth::UserDatabase>, mut c
             .secure(true)
             .finish()
         );
-        return Ok(Redirect::to(uri!(list)))
+        return Ok(Redirect::to("/list"))
     } 
     
     let mut context = Context::new();
@@ -123,7 +123,7 @@ fn new_event_grant_post(
     mailer: State<mail::EmailSender>,
     templater: TemplateRenderer,
     database: State<Database>
-)  -> Result<Flash<Redirect>, status::BadRequest<Template>> {
+)  -> Result<Redirect, status::BadRequest<Template>> {
     let event = event.into_inner();
     match event.validate() {
         Ok(_) => {
@@ -155,26 +155,20 @@ fn new_event_grant_post(
 
                 return database.0.flush()
                     .map_err(|e| e.to_string())
-                    .map(|_| uri!(view_grant: id.to_string()))
-                    .and_then(|uri| {
-                        if let Some(addr) = db_item.get_addr_info() {
-                            let mut context = Context::new();
-                            context.insert("grant", &db_item);
-                            context.insert("uri", &uri.to_string());
-                            let html = templater.render("grants/emails/angenommen", context);
-                            let subject = "Dein Radikal*Fund Antrag ist eingegangen".to_string();
-                            mail::send_email(&mailer, addr, subject, html)
-                                .map(|_| uri)
-                        } else {
-                            Ok(uri)
-                        }
+                    .and_then(|_| db_item.get_addr_info().ok_or("No valid Email Addr given".to_string()))
+                    .and_then(|addr| db_item.email_token()
+                        .map(|t| (addr, t)).ok_or("No valid Token found".to_string()))
+                    .and_then(|(addr, token)| {
+                        let confirm_uri = uri!(confirm_grant: id.to_string(), token);
+                        let mut context = Context::new();
+                        context.insert("grant", &db_item);
+                        context.insert("uri", &confirm_uri.to_string());
+                        let html = templater.render("grants/emails/eingang", context);
+                        let subject = "Bitte Email Bestätigen".to_string();
+                        mail::send_email(&mailer, addr, subject, html)
+                            .map(|_| uri!(view_grant: id.to_string()))
                     })
-                    .map(|uri| {
-                        Flash::success(
-                            Redirect::to(uri),
-                            "Dein Antrag ist eingegangen. Danke!"
-                        )
-                    })
+                    .map(|uri| Redirect::to(uri))
                     .map_err(|e| status::BadRequest(Some(render_error(e))))
             }
         }
@@ -223,8 +217,13 @@ fn default_context(flash: Option<FlashMessage>, user: Option<auth::User>) -> Con
     context
 }
 
-#[get("/list")]
-fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User)
+#[get("/list?<show>")]
+fn list(
+    database: State<Database>, 
+    flash: Option<FlashMessage>,
+    user: auth::User,
+    show: Option<String>,
+)
     -> Result<Template, status::BadRequest<Template>> //  FIXME: proper error code
 {
     let mut context = default_context(flash, Some(user));
@@ -257,6 +256,11 @@ fn list(database: State<Database>, flash: Option<FlashMessage>, user: auth::User
             }
         );
     context.insert("entries", &entries);
+
+    let shown = show.unwrap_or_default();
+    context.insert("show_pending", &shown.contains("pending"));
+    context.insert("show_archived", &shown.contains("archived"));
+
     Ok(Template::render("grants/list", &context))
 }
 
@@ -304,6 +308,38 @@ fn update_grant(
         grant.title().expect("We have a grant"),
         grant.state_name().expect("We are a grant")
     )))
+}
+
+#[get("/confirm/<id>/<token>")]
+fn confirm_grant(
+    id: String,
+    token: String,
+    database: State<Database>,
+    flash: Option<FlashMessage>,
+    user: Option<auth::User>
+)
+    -> Result<Flash<Redirect>, status::NotFound<Template>>
+{
+    let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
+    let mut grant = get_or_404(&database, uuid.as_bytes())?;
+    if grant.state_name() != Some("pending") {
+        return Ok(Flash::new(Redirect::to(uri!(view_grant: id)), "none", "Email bereits bestätigt."))
+    }
+
+    if grant.email_token() == Some(token) {
+        grant.next_stage(
+            "_Antragstellerin_".to_string(),
+            model::NextStageForm::new_simple("incoming")
+        ).map_err(|e|status::NotFound(render_error(e.to_string())))?;
+
+        database.0.insert(uuid.as_bytes(), grant.encode())
+            .and_then(|_| database.0.flush())
+            .map_err(|e| status::NotFound(render_error(e.to_string())))?;
+
+        Ok(Flash::success(Redirect::to(uri!(view_grant: id)), "Email Adresse bestätigt"))
+    } else {
+        Err(status::NotFound(render_error("Token stimmt nicht überein".to_owned())))
+    }
 }
 
 #[get("/v/<id>")]
@@ -430,30 +466,46 @@ mod test {
 
     struct TestClient {
         client: Client,
-        _dir: TempDir
+        _tmp_root: TempDir,
+        tmp_db: TempDir,
+        tmp_mail: TempDir,
     }
 
     impl TestClient {
         fn new() -> TestClient {
             let tmpd = tempdir().expect("Creating tempdir failed");
+            let tmp_db = TempDir::new_in(tmpd.path()).unwrap();
+            let tmp_mail = TempDir::new_in(tmpd.path()).unwrap();
+
             let mut config = Config::build(Environment::Staging)
                 .address("127.0.0.1")
-                .port(700)
+                .port(7000)
                 .workers(1)
                 .unwrap();
 
-            let mut extras = HashMap::new();
+            // User Database
             let mut users = BTreeMap::new();
             users.insert("admin".to_string(), "test".to_string());
-            extras.insert("database".to_string(), tmpd.path().to_str().unwrap().into());
+
+            // E-Mail Setup
+            let mut email = BTreeMap::new();
+            email.insert("transport".to_string(), "file".to_string());
+            email.insert("from".to_string(), "test@example.org".to_string());
+            email.insert("file".to_string(), tmp_mail.path().to_str().unwrap().into());
+
+            let mut extras = HashMap::new();
+            extras.insert("database".to_string(), tmp_db.path().to_str().unwrap().into());
             extras.insert("users".to_string(), users.into());
+            extras.insert("mail".to_string(), email.into());
 
             config.set_extras(extras);
             let client = Client::new(setup(rocket::custom(config))).expect("client setup works");
 
             TestClient {
                 client,
-                _dir: tmpd,
+                tmp_mail,
+                tmp_db,
+                _tmp_root: tmpd,
             }
             
         }
@@ -527,8 +579,25 @@ mod test {
         .len()
     }
 
+
+    fn grant_status(client: &Client, path: &str) -> String {
+        let mut resp = client.get(path).dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        let list = select::document::Document::from_read(resp.body().unwrap().into_inner()).unwrap();
+        list.find(Name("li").and(Attr("data-grant-state", ())))
+            .into_selection()
+            .first()
+            .expect("Every Grant Page has the status field")
+            .attr("data-grant-state")
+            .expect("Only showed up because it had the field")
+            .trim()
+            .to_string()
+    }
+
+
     #[test]
-    fn smoketest() {
+    fn submitting_works() {
         let tc = TestClient::new();
         let req = tc.client.get("/");
         let response = req.dispatch();
@@ -555,8 +624,29 @@ mod test {
             .body(bad_params.finish())
             .dispatch();
         assert_eq!(resp.status(), Status::SeeOther);
-
     }
+
+
+    #[test]
+    fn submit_email_flow_works() {
+        let tc = TestClient::new();
+        let req = tc.client.get("/");
+        let response = req.dispatch();
+
+        assert_eq!(response.status(), Status::Ok);
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .body(Serializer::new(String::new())
+                .extend_pairs(default_event_grand_fields().iter())
+                .finish()
+            )
+            .dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get("Location").next().expect("Location must be present");
+        assert_eq!(grant_status(&tc.client, location), "pending");
+    }
+
 
     #[test]
     fn required_event_grant_fields() {
@@ -723,7 +813,10 @@ mod test {
                 .dispatch();
             assert_eq!(resp.status(), Status::SeeOther);
             
-            assert_eq!(items_count(&tc.client, None), x);
+            // not shown by default
+            assert_eq!(items_count(&tc.client, None), 0);
+            // but shown if enabled
+            assert_eq!(items_count(&tc.client, Some("/list?show=pending")), x);
         }
     }
 }

@@ -61,7 +61,6 @@ impl EmailSender {
 
 }
 
-
 pub fn make_lettre_transport(table: &Table) -> Result<EmailSender, String>
 {
     let transport = table.get("mail").and_then(|s| s.as_str()).unwrap_or("stub");

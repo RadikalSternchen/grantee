@@ -3,8 +3,11 @@ use parity_scale_codec::{Encode, Decode};
 use rocket::request::{Form, FromForm, FormItems};
 use serde::{Serialize, Deserialize};
 use std::time::SystemTime;
-use rand::thread_rng;
-use rand::seq::SliceRandom;
+use rand::{
+    thread_rng, Rng,
+    distributions::Alphanumeric,
+    seq::SliceRandom
+};
 use blake2::{Blake2b, Digest};
 
 // A trait that the Validate derive will impl
@@ -45,7 +48,14 @@ fn make_random_title(len: u8) -> String {
         s.push_str(ICONS.choose(&mut rng).expect("Exists"))
     }
     s
-} 
+}
+
+fn make_random_token(len: usize) -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .collect()
+}
 
 #[derive(Debug, Clone, Encode, Serialize, Deserialize, Decode)]
 pub enum Identity {
@@ -448,6 +458,8 @@ pub enum RejectionReason {
     OutOfMoney,
     /// Ran against the Quota
     OutOfQuota,
+    /// The E-Mail was never confirmed
+    EmailNeverConfirmed,
     /// We had a formal reason, specified Option
 	#[codec(index = "250")]
     Formal(String),
@@ -473,7 +485,9 @@ pub enum ArchivedState {
 pub enum GrantState {
     /// Not shown until submitted
     Draft,
-    /// This is in
+    /// Still requiring confirmation via email
+    Pending(String),
+    /// This is incoming
     Incoming,
     Checking,
     Board,
@@ -486,6 +500,7 @@ impl GrantState {
     pub fn short_name(&self) -> &'static str {
         match self {
             GrantState::Draft => "draft",
+            GrantState::Pending(_) => "pending",
             GrantState::Incoming => "incoming",
             GrantState::Checking => "checking",
             GrantState::Board => "board",
@@ -532,6 +547,7 @@ impl<T: Encode + Decode + Archivable> GrantProcess<T> {
     {
         let next = match (next_stage, &self.state) {
             ("draft", GrantState::Draft) |
+            ("pending", GrantState::Pending(_)) |
             ("incoming", GrantState::Incoming) |
             ("checking", GrantState::Checking) |
             ("board", GrantState::Board) |
@@ -544,6 +560,7 @@ impl<T: Encode + Decode + Archivable> GrantProcess<T> {
                 // nothing to be done
                 return Ok(None)
             },
+            ("incoming", GrantState::Pending(_)) => GrantState::Incoming,
             ("checking", _ ) => GrantState::Checking,
             ("board", _ ) => GrantState::Board,
             ("outofmoney", _ ) => GrantState::Archived(
@@ -630,7 +647,7 @@ impl<T> From<T> for GrantProcess<T>
             created: now.clone(),
             last_updated: now,
             title: make_random_title(5),
-            state: GrantState::Incoming,
+            state: GrantState::Pending(make_random_token(8)),
             activities: vec![],
             details: t,
         }
@@ -642,6 +659,16 @@ pub struct NextStageForm {
     next: String,
     comment: Option<String>,
     send_mail: bool,
+}
+
+impl NextStageForm {
+    pub fn new_simple(next: &str) -> Self {
+        Self {
+            next: next.into(),
+            comment: None,
+            send_mail: false
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Encode, Decode)]
@@ -666,6 +693,26 @@ impl Model {
         match self {
             Model::EventGrant(g) => Some(g.state.short_name()),
             Model::AktivistiGrant(g) => Some(g.state.short_name()),
+            _ => None
+        }
+    }
+
+    pub fn email_token(&self) -> Option<String> {
+        match self {
+            Model::EventGrant(g) => {
+                if let GrantState::Pending(ref token) = g.state {
+                    Some(token.clone())
+                } else {
+                    None
+                }
+            }
+            Model::AktivistiGrant(g)=> {
+                if let GrantState::Pending(ref token) = g.state {
+                    Some(token.clone())
+                } else {
+                    None
+                }
+            }
             _ => None
         }
     }

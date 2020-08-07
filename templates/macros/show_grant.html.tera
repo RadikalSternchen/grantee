@@ -11,6 +11,8 @@
         {% elif state.Archived == "Failed" %}
             <span title="Abgelehnt">❌</span>
         {% endif %}
+    {% elif state is containing ("Pending") %}
+        <span title="pending">📨</span>
     {% elif state is containing ("Accepted") %}
         <span title="accepted">✔️</span>
     {% elif state is containing ("Paid") %}
@@ -25,6 +27,28 @@
         <span title="board">🟡</span>
     {% else %}
         🤷 {{state}}
+    {% endif %}
+{% endmacro %}
+
+{% macro status_short(state) %}
+    {% if state is containing ("Archived") %}
+        archived
+    {% elif state is containing ("Pending") %}
+        pending
+    {% elif state is containing ("Accepted") %}
+        accepted
+    {% elif state is containing ("Paid") %}
+        paid
+    {% elif state == "Draft" %}
+        draft
+    {% elif state == "Incoming" %}
+        incoming
+    {% elif state == "Checking" %}
+        checking
+    {% elif state == "Board" %}
+        board
+    {% else %}
+        unknown
     {% endif %}
 {% endmacro %}
 
@@ -69,8 +93,8 @@
 
 
 {% macro grant_status(process, uuid) %}
-    <ul>
-        <li>Status: {{self::status_icon(state=process.state)}} </li>
+    <ul class="grant-status">
+        <li data-grant-state="{{self::status_short(state=process.state)}}">Status: {{self::status_icon(state=process.state)}} </li>
         <li>Kennung: {{process.title}} ({{uuid}})</li>
         <li>Eingegangen: {{process.created | date(format="%d. %B %Y")}}</li>
         <li>Aktualisiert: {{process.last_updated | date(format="%d. %B %Y")}}</li>
@@ -80,6 +104,12 @@
 {% macro grant_details(info, process) %}
     <h3>Antrag '{{process.title}}' über {{info.amount}}€ </h3>
     <p>{{info.cost_breakdown}}</p>
+    {% if process.state is containing("Pending") %}
+        <div class="message warning">
+            <strong>Bitte Email bestätigen</strong>
+            <p>Eine E-Mail mit verifikations-link wurde an die angegebene E-Mail-Adresse gesandt. Bitte bestätige die E-Mail-Adresse indem du den dort angegebenen Link klickst – vorher wird der Antrag nicht bearbeiet werden. Bitte prüfe auch das Spam-Postfach. <em>Bei Problemen melde dich bitte bei <a href="mailto:admin@radikal.jetzt">admin@radikal.jetzt</a>.</p>
+        </div>
+    {% endif %}
 {% endmacro %}
 
 {% macro person_details(info, ids) %}
