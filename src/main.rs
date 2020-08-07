@@ -4,7 +4,6 @@
 #[macro_use] extern crate validator_derive;
 extern crate validator;
 
-use rocket::config::ConfigError;
 use rocket::fairing::AdHoc;
 use rocket::request::{LenientForm, Form, FlashMessage};
 use rocket::response::{Flash, Responder, Redirect, status};
@@ -40,8 +39,6 @@ impl <'_a, '_r> TemplateRenderer<'_a, '_r> {
     pub fn render<S,C>(&self, name: S, context: C) -> String
     where S: Into<std::borrow::Cow<'static, str>>, C: serde::Serialize, S: std::fmt::Display
     {
-        use rocket_contrib::templates::Template;
-        use rocket::response::Responder;
         let template = Template::render(name.into(), context);
         let mut response = template.respond_to(self.0).expect("Rendering can't fail.");
         response.body_string().unwrap_or_else(String::new)
@@ -190,7 +187,7 @@ fn new_event_grant_post(
         }
         Err(errors) => {
             let mut context =  Context::new();
-            
+
             context.insert("form", &event);
             context.insert("errors", &errors);
 
@@ -331,11 +328,7 @@ fn confirm_grant(
     id: String,
     token: String,
     database: State<Database>,
-    flash: Option<FlashMessage>,
-    user: Option<auth::User>
-)
-    -> Result<Flash<Redirect>, status::NotFound<Template>>
-{
+) -> Result<Flash<Redirect>, status::NotFound<Template>> {
     let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
     let mut grant = get_or_404(&database, uuid.as_bytes())?;
     if grant.state_name() != Some("pending") {
@@ -706,7 +699,6 @@ mod test {
                 break;
             }
         }
-
 
         let confirm_url = url_found.expect("No connfirmation url found");
         assert!(confirm_url.starts_with("http://test.radikal.org"), "URL malformatted");

@@ -11,8 +11,6 @@ use rocket::config::Table;
 use std::str::FromStr;
 use parking_lot::Mutex;
 
-use rocket_contrib::templates::Template;
-
 /// Wrapper around various lettre::Transport implementations
 pub struct EmailSender(Mutex<SenderInner>);
 enum SenderInner{

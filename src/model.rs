@@ -1,6 +1,6 @@
 
 use parity_scale_codec::{Encode, Decode};
-use rocket::request::{Form, FromForm, FormItems};
+use rocket::request::{FromForm, FormItems};
 use serde::{Serialize, Deserialize};
 use std::time::SystemTime;
 use rand::{
@@ -11,7 +11,7 @@ use rand::{
 use blake2::{Blake2b, Digest};
 
 // A trait that the Validate derive will impl
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 static ICONS : [&str; 440] = ["👿","👹","👺","🤡","💩","👻","💀","👽","👾","🤖","🎃",
 "🧳","🌂","🧵","🧶","👓","🕶","🥽","🥼","🦺","👔","👕","👖","🧣","🧤","🧥","🧦",
