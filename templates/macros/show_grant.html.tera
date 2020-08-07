@@ -136,8 +136,24 @@
     <p>{{info.why}}<p>
 {% endmacro %}
 
-{% macro next_step(process) %}
+{% macro next_step(process, quota_state) %}
     {% if not process.state is containing("Archived") %}
+        {% if quota_state == "breaks_poc" %}
+            <div data-quota-state="breaks_poc" class="message warning">
+                <strong>Bricht die Nicht-Weiß Quote</strong>
+                <p>Dieser Antrag sollte zurück gehalten werden, bis die Quote wieder erreicht ist.</p>
+            </div>
+        {% elif quota_state == "breaks_women" %}
+            <div data-quota-state="breaks_women" class="message warning">
+                <strong>Bricht die Nicht-Mann-Quote</strong>
+                <p>Dieser Antrag sollte zurück gehalten werden, bis die Quote wieder erreicht ist.</p>
+            </div>
+        {% else %}
+            <div data-quota-state="ok" class="message none">
+                <strong>Quote: okay.</strong>
+                <p>Dieser Antrag kann ohne Problem weiterbehandelt werden</p>
+            </div>
+        {% endif %}
         <form method="POST">
             <div class="row">
                 <div class="column column-50">

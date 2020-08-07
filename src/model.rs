@@ -93,6 +93,34 @@ impl Identity {
             i => return Err(format!("Unknown key {:}", i)),
         })
     }
+    fn is_non_man(&self) -> bool {
+        match *self {
+            Self::WoC | Self::NonMan | Self::Inter | Self::Agender | Self::Mother | Self::Woman => true,
+            _ => false
+        }
+    }
+
+    fn is_non_white(&self) -> bool {
+        match *self {
+            Self::WoC | Self::NonWhite | Self::BIPoC | Self::SintiRoma| Self::Muslima => true,
+            _ => false
+        }
+
+    }
+}
+
+fn check_identities(ids: std::slice::Iter<Identity>) -> (bool, bool) {
+    let mut non_man = false;
+    let mut non_white = false;
+    for id in ids {
+        if id.is_non_man() {
+            non_man = true;
+        }
+        if id.is_non_white() {
+            non_white = true;
+        }
+    }
+    (non_white, non_man)
 }
 
 
@@ -509,6 +537,13 @@ impl GrantState {
             GrantState::Archived(_) => "archived",
         }
     }
+
+    fn quota_relevant(&self) -> bool {
+        match self {
+            GrantState::Accepted(_) | GrantState::Paid(_) | GrantState::Archived(ArchivedState::Funded(_)) => true,
+            _ => false
+        }
+    }
 }
 
 #[derive(Serialize, Clone, Deserialize, Encode, Decode, Debug)]
@@ -693,6 +728,22 @@ impl Model {
         match self {
             Model::EventGrant(g) => Some(g.state.short_name()),
             Model::AktivistiGrant(g) => Some(g.state.short_name()),
+            _ => None
+        }
+    }
+
+    pub fn quota_relevant(&self) -> bool {
+        match self {
+            Model::EventGrant(g) => g.state.quota_relevant(),
+            Model::AktivistiGrant(g) => g.state.quota_relevant(),
+            _ => false
+        }
+    }
+
+    pub fn check_identities(&self) -> Option<(bool, bool)> {
+        match self {
+            Model::EventGrant(g) => Some(check_identities(g.details.identities.iter())),
+            Model::AktivistiGrant(g) => Some(check_identities(g.details.identities.iter())),
             _ => None
         }
     }

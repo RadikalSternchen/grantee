@@ -203,7 +203,9 @@ fn new_event_grant_post(
     }
 }
 
-fn get_or_404(database: &Database, id: &[u8]) -> Result<model::Model, status::NotFound<Template>> {
+fn get_or_404(database: &Database, id: &[u8])
+    -> Result<model::Model, status::NotFound<Template>>
+{
     match database.0.get(id) {
         Ok(Some(m)) => model::Model::decode(&mut m.as_ref()).map_err(|e|
                 status::NotFound(render_error(format!("Error decoding item: {:}", e)))),
@@ -280,8 +282,8 @@ fn list(
 #[post("/v/<id>?<next>", data = "<form>")]
 fn update_grant(
     id: String,
-    next: Option<String>,
     form: Form<model::NextStageForm>,
+    next: Option<String>,
     db: State<Database>,
     user: auth::User,
     mailer: State<mail::EmailSender>,
@@ -351,18 +353,81 @@ fn confirm_grant(
     }
 }
 
+fn gen_quoata_state(db: &Database, model: &model::Model) -> Result<String, String> {
+    let (non_white, non_man) = model.check_identities().unwrap_or_default();
+    if non_white && non_man {
+        return Ok("ok".to_string())
+    }
+
+    let idx = db.0.get(IDX_OPEN_GRANTS.as_bytes())
+        .map_err(|e| e.to_string())?
+        .and_then(|idx_ival| Index::decode(&mut idx_ival.as_ref()).ok())
+        .unwrap_or_default();
+
+    let mut total = 0u16;
+    let mut total_non_white = 0u16;
+    let mut total_non_man = 0u16;
+
+    for (non_w, non_m) in idx.iter()
+        .filter_map(| uuid |
+            db.0.get(uuid.as_ref())
+            .ok()
+            .unwrap_or_default()
+            .and_then(|ivec| model::Model::decode(&mut ivec.as_ref()).ok())
+        )
+        .filter_map(| mdl | {
+            if mdl.quota_relevant() {
+                mdl.check_identities()
+            } else {
+                None
+            }
+        })
+    {
+        total += 1;
+        if non_w {
+            total_non_white += 1
+        }
+        if non_m {
+            total_non_man += 1
+        }
+    }
+
+    println!("{} {} {}", total, total_non_man, total_non_white);
+
+    if !non_white {
+        if (total_non_white * 100 / (total + 1)) < 50 {
+            return Ok("breaks_poc".to_string())
+        }
+    }
+
+    if !non_man {
+        if (total_non_man * 100 / (total + 1)) < 75 {
+            return Ok("breaks_women".to_string())
+        }
+    }
+
+    return Ok("ok".to_string())
+}
+
 #[get("/v/<id>")]
-fn view_grant(id: String, database: State<Database>, flash: Option<FlashMessage>, user: Option<auth::User>)
-    -> Result<Template, status::NotFound<Template>>
-{
+fn view_grant(
+    id: String,
+    database: State<Database>,
+    flash: Option<FlashMessage>,
+    user: Option<auth::User>
+) -> Result<Template, status::NotFound<Template>> {
     let uuid = Uuid::parse_str(&id).map_err(|e|status::NotFound(render_error(e.to_string())))?;
     let grant = get_or_404(&database, uuid.as_bytes())?;
-    let with_related = user.is_some();
+    let with_current_user = user.is_some();
 
     let mut context = default_context(flash, user);
     context.insert("uuid", &uuid.to_string());
     
-    if with_related {
+    if with_current_user {
+        // add quota info
+        context.insert("quota_state", &gen_quoata_state(&database, &grant)
+            .map_err(|e|status::NotFound(render_error(e)))?);
+        // find related items
         let (id1, id2) = grant.get_rel_ids();
         let mut related = Vec::new();
 
@@ -465,7 +530,7 @@ mod test {
     use super::setup;
     use url::form_urlencoded::Serializer;
     use tempfile::{tempdir, TempDir};
-    use rocket::local::{Client, LocalResponse};
+    use rocket::local::Client;
     use std::collections::{BTreeMap, HashMap};
     use rocket::http::{ContentType, Status};
     use rocket::config::{Config, Environment};
@@ -474,7 +539,7 @@ mod test {
     use serde_json;
     use select;
 
-    type Params = Vec<(&'static str, &'static str)>;
+    type Params = Vec<(&'static str, String)>;
 
     struct TestClient {
         client: Client,
@@ -546,23 +611,12 @@ mod test {
             // required extra
             ("extra_accepted_privacy", "true"),
             ("extra_accepted_coc",  "true"),
-        ]
+        ].iter().map(|v| (v.0, v.1.to_string())).collect()
     }
 
-    fn with_field(params: &mut Params, field: &'static str, value: &'static str) {
-        let mut found: Option<usize> = None;
-
-        for (idx, val) in params.iter().enumerate() {
-            if val.0 == field {
-                found = Some(idx);
-                break
-            }
-        }
-        if let Some(idx) = found {
-            params.remove(idx);
-        }
-
-        params.push((field, value))
+    fn with_field(params: &mut Params, name: &'static str, value: String) {
+        params.retain(|v| v.0 != name);
+        params.push((name, value));
     }
 
     #[derive(Serialize, Deserialize)]
@@ -596,6 +650,35 @@ mod test {
         None
     }
 
+    fn confirm_grant_of(tc: &TestClient, host_addr: &str, to_addr: &str) -> String {
+        let msg = retrieve_email(&tc, to_addr).expect("Email was sent").into_message();
+        let mut url_found : Option<&str> = None;
+        for line in msg.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("http") {
+                url_found = Some(trimmed);
+                break;
+            }
+        }
+
+        let confirm_url = url_found.expect("No connfirmation url found");
+        assert!(confirm_url.starts_with(host_addr), "URL malformatted");
+        let resp = tc.client.get(&confirm_url[host_addr.len()..]).dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
+        resp.headers().get_one("Location").expect("Location must be present").to_string()
+    }
+
+    fn move_grant_to_stage(tc: &TestClient, path: &str, next: &str) {
+        let resp = tc.client.post(path)
+            .header(ContentType::Form)
+            .body(format!("next={}", next))
+            .dispatch();
+        
+        assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get_one("Location").expect("Location must be present");
+        assert_eq!(grant_status(&tc.client, location), next, "Switching to stage {} failed", next);
+    }
+
     fn admin_client() -> TestClient {
         let tc = TestClient::new();
         {
@@ -622,7 +705,6 @@ mod test {
         .len()
     }
 
-
     fn grant_status(client: &Client, path: &str) -> String {
         let mut resp = client.get(path).dispatch();
 
@@ -638,6 +720,76 @@ mod test {
             .to_string()
     }
 
+    fn grant_quota(client: &Client, path: &str) -> String {
+        let mut resp = client.get(path).dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        let list = select::document::Document::from_read(resp.body().unwrap().into_inner()).unwrap();
+        list.find(Attr("data-quota-state", ()))
+            .into_selection()
+            .first()
+            .expect("All Grants have the quota state field")
+            .attr("data-quota-state")
+            .expect("Only showed up because it had the field")
+            .trim()
+            .to_string()
+    }
+
+    fn submit_event_grant<F>(tc: &TestClient, f: F) -> String 
+        where F: Fn(&mut Params) -> ()
+    {
+
+        let mut fields = default_event_grand_fields();
+        f(&mut fields);
+
+        let resp = tc.client.post("/event-grants/new")
+            .header(ContentType::Form)
+            .header(rocket::http::Header::new("Host", "forms.radikal.org"))
+            .body(Serializer::new(String::new())
+                .extend_pairs(fields.iter())
+                .finish()
+            )
+            .dispatch();
+        assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get_one("Location").expect("Location must be present");
+        assert_eq!(grant_status(&tc.client, location), "pending");
+        location.to_string()
+    }
+
+    fn gen_archive(client: &TestClient) {
+        // all good, quote-wise
+        for x in 0..4 {
+            // submitting one
+            let addr = format!("woc{}@example.org",  x);
+            let location = submit_event_grant(client, |mut fields| {
+                with_field(&mut fields, "person_email", addr.clone());
+                with_field(&mut fields, "id_woc", "y".to_string());
+            });
+            move_grant_to_stage(client, &location, "accepted");
+            move_grant_to_stage(client, &location, "paid");
+        }
+
+        for x in 0..3 {
+            // submitting one
+            let addr = format!("poc{}@example.org",  x);
+            let location = submit_event_grant(client, |mut fields| {
+                with_field(&mut fields, "person_email", addr.clone());
+                with_field(&mut fields, "id_non_man", "y".to_string());
+            });
+            move_grant_to_stage(client, &location, "accepted");
+            move_grant_to_stage(client, &location, "paid");
+        }
+
+        for x in 0..2 {
+            // submitting one
+            let addr = format!("regular{}@example.org",  x);
+            let location = submit_event_grant(client, |mut fields| {
+                with_field(&mut fields, "person_email", addr.clone());
+            });
+            move_grant_to_stage(client, &location, "accepted");
+            move_grant_to_stage(client, &location, "paid");
+        }
+    }
 
     #[test]
     fn submitting_works() {
@@ -655,7 +807,8 @@ mod test {
             )
             .dispatch();
         assert_eq!(resp.status(), Status::SeeOther);
-
+        let location = resp.headers().get_one("Location").expect("Location must be present");
+        assert_eq!(grant_status(&tc.client, location), "pending");
 
         // works if unknown fields are submitted
         let mut bad_params = Serializer::new(String::new());
@@ -667,8 +820,9 @@ mod test {
             .body(bad_params.finish())
             .dispatch();
         assert_eq!(resp.status(), Status::SeeOther);
+        let location = resp.headers().get_one("Location").expect("Location must be present");
+        assert_eq!(grant_status(&tc.client, location), "pending");
     }
-
 
     #[test]
     fn submit_email_flow_works() {
@@ -690,30 +844,13 @@ mod test {
         let location = resp.headers().get("Location").next().expect("Location must be present");
         assert_eq!(grant_status(&tc.client, location), "pending");
 
-        let msg = retrieve_email(&tc, "ben@example.org").expect("Email was sent").into_message();
-        let mut url_found : Option<&str> = None;
-        for line in msg.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("http") {
-                url_found = Some(trimmed);
-                break;
-            }
-        }
-
-        let confirm_url = url_found.expect("No connfirmation url found");
-        assert!(confirm_url.starts_with("http://test.radikal.org"), "URL malformatted");
-        let resp = tc.client.get(&confirm_url[23..]).dispatch();
-
-        assert_eq!(resp.status(), Status::SeeOther);
-        let new_location = resp.headers().get("Location").next().expect("Location must be present");
+        let new_location = confirm_grant_of(&tc, "http://test.radikal.org", "ben@example.org");
 
         assert_eq!(location, new_location, "Locations differ");
 
         // the grant is now confirmed
         assert_eq!(grant_status(&tc.client, location), "incoming");
-
     }
-
 
     #[test]
     fn required_event_grant_fields() {
@@ -762,8 +899,8 @@ mod test {
         assert_eq!(resp.status(), Status::Ok);
 
         let mut main_info = default_event_grand_fields();
-        with_field(&mut main_info, "person_email", "test@example.org");
-        with_field(&mut main_info, "bank_iban", "OG00 12345 6789");
+        with_field(&mut main_info, "person_email", "test@example.org".into());
+        with_field(&mut main_info, "bank_iban", "OG00 12345 6789".into());
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
@@ -779,7 +916,7 @@ mod test {
         assert_eq!(items_count(&tc.client, Some(location.clone())), 0); // none
 
         let mut grant_info = default_event_grand_fields();
-        with_field(&mut grant_info, "person_email", "test@example.org");
+        with_field(&mut grant_info, "person_email", "test@example.org".into());
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
@@ -794,7 +931,7 @@ mod test {
         assert_eq!(items_count(&tc.client, Some(location.clone())), 1); // same email
 
         let mut grant_info = default_event_grand_fields();
-        with_field(&mut grant_info, "bank_iban", "OG00 12345 6789");
+        with_field(&mut grant_info, "bank_iban", "OG00 12345 6789".into());
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
@@ -809,7 +946,7 @@ mod test {
         assert_eq!(items_count(&tc.client, Some(location.clone())), 2); // same iban
 
         let mut grant_info = default_event_grand_fields();
-        with_field(&mut grant_info, "bank_iban", "OG00 12345 1234");
+        with_field(&mut grant_info, "bank_iban", "OG00 12345 1234".into());
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
@@ -824,7 +961,7 @@ mod test {
         assert_eq!(items_count(&tc.client, Some(location.clone())), 2); // differnt iban
 
         let mut grant_info = default_event_grand_fields();
-        with_field(&mut grant_info, "person_email", "test@example.com");
+        with_field(&mut grant_info, "person_email", "test@example.com".into());
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
@@ -849,6 +986,7 @@ mod test {
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
+            .header(rocket::http::Header::new("Host", "community.radikal.org"))
             .body(Serializer::new(String::new())
                 .extend_pairs(default_event_grand_fields().iter())
                 .finish()
@@ -860,10 +998,17 @@ mod test {
 
         let resp = tc.client.get(location).dispatch();
         assert_eq!(resp.status(), Status::Ok);
+
+        confirm_grant_of(&tc, "http://community.radikal.org", "ben@example.org");
+        assert_eq!(grant_status(&tc.client, location), "incoming");
+        move_grant_to_stage(&tc, location, "checking");
+        move_grant_to_stage(&tc, location, "board");
+        move_grant_to_stage(&tc, location, "accepted");
+        move_grant_to_stage(&tc, location, "paid");
     }
 
     #[test]
-    fn submits_are_lisited() {
+    fn submits_are_listed() {
         let tc = admin_client();
         let resp = tc.client.get("/list").dispatch();
 
@@ -871,19 +1016,107 @@ mod test {
 
         for x in 1..5 {
             // submitting one
+            let addr = format!("addre{}@example.org",  x);
+            let mut fields = default_event_grand_fields();
+            with_field(&mut fields, "person_email", addr.clone());
             let resp = tc.client.post("/event-grants/new")
                 .header(ContentType::Form)
+                .header(rocket::http::Header::new("Host", "forms.radikal.org"))
                 .body(Serializer::new(String::new())
-                    .extend_pairs(default_event_grand_fields().iter())
+                    .extend_pairs(fields.iter())
                     .finish()
                 )
                 .dispatch();
             assert_eq!(resp.status(), Status::SeeOther);
+            let location = resp.headers().get_one("Location").expect("Location must be present");
+            assert_eq!(grant_status(&tc.client, location), "pending");
             
-            // not shown by default
-            assert_eq!(items_count(&tc.client, None), 0);
+            // not shown when pending
+            assert_eq!(items_count(&tc.client, None), x - 1);
             // but shown if enabled
             assert_eq!(items_count(&tc.client, Some("/list?show=pending")), x);
+
+            confirm_grant_of(&tc, "http://forms.radikal.org", &addr);
+            assert_eq!(grant_status(&tc.client, location), "incoming");
+
+            // shown when incoming
+            assert_eq!(items_count(&tc.client, None), x);
         }
     }
+
+    #[test]
+    fn quota_blocks() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        gen_archive(&tc);
+
+        let location = submit_event_grant(&tc, |_| {});
+        assert_eq!(grant_status(&tc.client, &location), "pending");
+        assert_eq!(&grant_quota(&tc.client, &location), "breaks_poc");
+    }
+
+    #[test]
+    fn quota_blocks_bipoc() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        gen_archive(&tc);
+
+        let location = submit_event_grant(&tc, |mut fields| {
+            with_field(&mut fields, "id_bipoc", "y".to_string());
+        });
+        assert_eq!(grant_status(&tc.client, &location), "pending");
+        assert_eq!(&grant_quota(&tc.client, &location), "breaks_women");
+    }
+
+    #[test]
+    fn quota_accepts_woc() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        gen_archive(&tc);
+
+        let location = submit_event_grant(&tc, |mut fields| {
+            with_field(&mut fields, "id_woc", "y".to_string());
+        });
+        assert_eq!(grant_status(&tc.client, &location), "pending");
+        assert_eq!(&grant_quota(&tc.client, &location), "ok");
+    }
+
+    #[test]
+    fn quota_accepts_non_man_poc() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        gen_archive(&tc);
+
+        let location = submit_event_grant(&tc, |mut fields| {
+            with_field(&mut fields, "id_bipoc", "y".to_string());
+            with_field(&mut fields, "id_agender", "y".to_string());
+        });
+        assert_eq!(grant_status(&tc.client, &location), "pending");
+        assert_eq!(&grant_quota(&tc.client, &location), "ok");
+    }
+
+    #[test]
+    fn quota_accepts_non_man_muslima() {
+        let tc = admin_client();
+        let resp = tc.client.get("/list").dispatch();
+
+        assert_eq!(resp.status(), Status::Ok);
+        gen_archive(&tc);
+
+        let location = submit_event_grant(&tc, |mut fields| {
+            with_field(&mut fields, "id_muslima", "y".to_string());
+            with_field(&mut fields, "id_non_man", "y".to_string());
+        });
+        assert_eq!(grant_status(&tc.client, &location), "pending");
+        assert_eq!(&grant_quota(&tc.client, &location), "ok");
+    }
+
 }
