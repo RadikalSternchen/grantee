@@ -63,15 +63,18 @@ impl EmailSender {
 
 pub fn make_lettre_transport(table: &Table) -> Result<EmailSender, String>
 {
-    let transport = table.get("mail").and_then(|s| s.as_str()).unwrap_or("stub");
+    let transport = table.get("transport").and_then(|s| s.as_str()).unwrap_or("stub");
     let from = table.get("from")
         .and_then(|s| s.as_str())
         .unwrap_or("ben@example.org")
         .to_string();
     Ok(match transport {
         "file" => {
-            let file = table.get("file").and_then(|s| s.as_str()).unwrap_or("emails.log");
-            EmailSender(Mutex::new(SenderInner::File(FileTransport::new(file), from)))
+            let path = table.get("path").and_then(|s| s.as_str()).unwrap_or("emails");
+            println!("Writing Emails to {:}", path);
+            let _ = std::fs::create_dir_all(path);
+
+            EmailSender(Mutex::new(SenderInner::File(FileTransport::new(path), from)))
         },
         "sendmail" => EmailSender(Mutex::new(SenderInner::Sendmail(SendmailTransport::new(), from))),
         "smtp" => {

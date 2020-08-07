@@ -117,12 +117,28 @@ fn render_error(e: String) -> Template {
     Template::render("generic/error", &context)
 }
 
+struct Hostname(String);
+
+impl<'a, 'r> rocket::request::FromRequest<'a, 'r> for Hostname {
+    type Error = ();
+
+    fn from_request(request: &'a rocket::Request<'r>) -> rocket::request::Outcome<Self, Self::Error> {
+        let host_name = request
+            .headers()
+            .get_one("Host")
+            .map(|e| e.to_string())
+            .unwrap_or_else(|| std::env::var("VIRTUAL_HOST").unwrap_or("localhost".to_string()));
+        rocket::Outcome::Success(Hostname(host_name))
+    }
+}
+
 #[post("/event-grants/new", data = "<event>")]
 fn new_event_grant_post(
     event: LenientForm<model::EventGrantForm>,
     mailer: State<mail::EmailSender>,
     templater: TemplateRenderer,
-    database: State<Database>
+    database: State<Database>,
+    hostname: Hostname,
 )  -> Result<Redirect, status::BadRequest<Template>> {
     let event = event.into_inner();
     match event.validate() {
@@ -159,7 +175,7 @@ fn new_event_grant_post(
                     .and_then(|addr| db_item.email_token()
                         .map(|t| (addr, t)).ok_or("No valid Token found".to_string()))
                     .and_then(|(addr, token)| {
-                        let confirm_uri = uri!(confirm_grant: id.to_string(), token);
+                        let confirm_uri = format!("http://{}{}", hostname.0, uri!(confirm_grant: id.to_string(), token));
                         let mut context = Context::new();
                         context.insert("grant", &db_item);
                         context.insert("uri", &confirm_uri.to_string());
@@ -174,7 +190,7 @@ fn new_event_grant_post(
         }
         Err(errors) => {
             let mut context =  Context::new();
-            println!("{:#?} –> {:#?}", event, errors);
+            
             context.insert("form", &event);
             context.insert("errors", &errors);
 
@@ -444,6 +460,7 @@ fn setup(rocket: rocket::Rocket) -> rocket::Rocket {
 
             list,
             view_grant,
+            confirm_grant,
             update_grant,
             new_event_grant_post,
             new_event_grant,
@@ -460,6 +477,8 @@ mod test {
     use rocket::http::{ContentType, Status};
     use rocket::config::{Config, Environment};
     use select::predicate::{Predicate, Name, Attr, Class};
+    use serde::{Serialize, Deserialize};
+    use serde_json;
     use select;
 
     type Params = Vec<(&'static str, &'static str)>;
@@ -491,7 +510,7 @@ mod test {
             let mut email = BTreeMap::new();
             email.insert("transport".to_string(), "file".to_string());
             email.insert("from".to_string(), "test@example.org".to_string());
-            email.insert("file".to_string(), tmp_mail.path().to_str().unwrap().into());
+            email.insert("path".to_string(), tmp_mail.path().to_str().unwrap().into());
 
             let mut extras = HashMap::new();
             extras.insert("database".to_string(), tmp_db.path().to_str().unwrap().into());
@@ -551,7 +570,38 @@ mod test {
         }
 
         params.push((field, value))
-    } 
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct StoredEmail {
+        envelope: lettre::Envelope,
+        message_id: String,
+        message: Vec<u8>,
+    }
+
+    impl StoredEmail { 
+        fn into_message(self) -> String {
+            String::from_utf8(self.message).expect("Messages parse")
+        }
+    }
+
+    fn retrieve_email(tc: &TestClient, to_addr: &str) -> Option<StoredEmail> {
+        let to_addr = lettre::EmailAddress::new(to_addr.to_string()).expect("Email Address invalid");
+        for entry in std::fs::read_dir(tc.tmp_mail.path()).ok()?.filter_map(|f| f.ok()) {
+            if entry.file_type().is_ok() {
+                if let Ok(f) = std::fs::File::open(entry.path()) {
+                    if let Ok(e) = serde_json::from_reader::<_, StoredEmail>(f) {
+                        for addr in e.envelope.to().iter() {
+                            if addr == &to_addr {
+                                return Some(e)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 
     fn admin_client() -> TestClient {
         let tc = TestClient::new();
@@ -637,6 +687,7 @@ mod test {
 
         let resp = tc.client.post("/event-grants/new")
             .header(ContentType::Form)
+            .header(rocket::http::Header::new("Host", "test.radikal.org"))
             .body(Serializer::new(String::new())
                 .extend_pairs(default_event_grand_fields().iter())
                 .finish()
@@ -645,6 +696,30 @@ mod test {
         assert_eq!(resp.status(), Status::SeeOther);
         let location = resp.headers().get("Location").next().expect("Location must be present");
         assert_eq!(grant_status(&tc.client, location), "pending");
+
+        let msg = retrieve_email(&tc, "ben@example.org").expect("Email was sent").into_message();
+        let mut url_found : Option<&str> = None;
+        for line in msg.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("http") {
+                url_found = Some(trimmed);
+                break;
+            }
+        }
+
+
+        let confirm_url = url_found.expect("No connfirmation url found");
+        assert!(confirm_url.starts_with("http://test.radikal.org"), "URL malformatted");
+        let resp = tc.client.get(&confirm_url[23..]).dispatch();
+
+        assert_eq!(resp.status(), Status::SeeOther);
+        let new_location = resp.headers().get("Location").next().expect("Location must be present");
+
+        assert_eq!(location, new_location, "Locations differ");
+
+        // the grant is now confirmed
+        assert_eq!(grant_status(&tc.client, location), "incoming");
+
     }
 
 
